@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="A pixel-art endless ride through moonlit dunes.">
+<title>Rihla · رحلة</title>
+<style>
+*{box-sizing:border-box}body{margin:0;color:#fff0ce;background:#101222;font-family:system-ui,sans-serif}main{position:relative;height:100svh;min-height:420px;overflow:hidden}canvas{width:100%;height:100%;display:block;image-rendering:pixelated;touch-action:manipulation}.hud{position:absolute;inset:0 0 auto;display:flex;justify-content:space-between;padding:clamp(16px,4vw,48px);font:700 14px ui-monospace,monospace;letter-spacing:.1em;text-shadow:0 2px #101222;pointer-events:none}.hud strong{display:block;font-size:24px}.menu{position:absolute;top:35%;left:50%;width:min(90%,460px);transform:translate(-50%,-50%);text-align:center;text-shadow:0 3px 10px #101222}.menu[hidden]{display:none}h1{font:900 clamp(52px,12vw,104px)/.95 Georgia,serif;margin:0;letter-spacing:-.05em}.arabic{display:block;color:#ffc997;font:700 25px Georgia,serif;margin-bottom:8px}p{margin:14px 0 20px}button{border:2px solid #fff0ce;background:#ffc997;color:#231726;padding:12px 24px;font:700 16px ui-monospace,monospace;cursor:pointer;box-shadow:4px 4px #432d40}button:focus-visible{outline:3px solid white;outline-offset:5px}.hint{position:absolute;bottom:18px;left:50%;transform:translateX(-50%);white-space:nowrap;background:#221a2cdd;padding:8px 12px;font:14px ui-monospace,monospace;pointer-events:none}
+</style>
+</head>
+<body><main>
+<canvas aria-label="A rider seen from behind on a moonlit desert trail"></canvas>
+<div class="hud"><div>DISTANCE<strong id="score">0 m</strong></div><div>BEST<strong id="best">0 m</strong></div></div>
+<section class="menu" id="menu"><span class="arabic" lang="ar">رحلة</span><h1>Rihla</h1><p id="message">Ride the moonlit dunes.</p><button id="play">Start ride</button></section>
+<div class="hint">Space / ↑ / tap to jump</div>
+</main>
+<script>
+'use strict';
+const canvas = document.querySelector('canvas');
+const ctx = canvas.getContext('2d');
+const scoreLabel = document.querySelector('#score');
+const bestLabel = document.querySelector('#best');
+const menu = document.querySelector('#menu');
+const message = document.querySelector('#message');
+const play = document.querySelector('#play');
+const height = 240;
+const horizon = 112;
+const feet = 204;
+let width, center, state = 'ready', distance = 0, speed = 120;
+let jump = 0, velocity = 0, nextRock = 195, rocks = [], best = 0;
+try { best = Number(localStorage.getItem('rihla-best')) || 0; } catch {}
+bestLabel.textContent = best + ' m';
+
+function resize() {
+  width = Math.round(height * canvas.clientWidth / canvas.clientHeight);
+  center = width / 2;
+  canvas.width = width;
+  canvas.height = height;
+}
+window.addEventListener('resize', resize);
+resize();
+
+function rect(color, x, y, w, h) {
+  ctx.fillStyle = color;
+  ctx.fillRect(Math.round(x), Math.round(y), Math.ceil(w), Math.ceil(h));
+}
+
+function noise(number) {
+  const value = Math.sin(number * 127.1 + 9.2) * 43758.5453;
+  return value - Math.floor(value);
+}
+
+function pixelDisk(x, y, radius, color) {
+  for (let row = -radius; row <= radius; row++) {
+    const span = Math.floor(Math.sqrt(radius * radius - row * row));
+    rect(color, x - span, y + row, span * 2 + 1, 1);
+  }
+}
+
+function landscape() {
+  const sky = ctx.createLinearGradient(0, 0, 0, 150);
+  ['#10132b', '#2d2349', '#80465d', '#d98670'].forEach((color, i) =>
+    sky.addColorStop(i / 3, color));
+  ctx.fillStyle = sky;
+  ctx.fillRect(0, 0, width, height);
+  for (let i = 0; i < width / 2; i++) {
+    const size = i % 13 === 0 ? 2 : 1;
+    rect(i % 3 === 0 ? '#f9ca9a' : '#a78ba9', noise(i) * width, noise(i + 800) * 95, size, size);
+  }
+  const moonX = width * 0.73;
+  pixelDisk(moonX, 49, 22, '#ffc693');
+  pixelDisk(moonX + 8, 44, 19, '#302545');
+  for (let layer = 0; layer < 4; layer++) {
+    const color = ['#56354e', '#754454', '#a55d5b', '#c17a60'][layer];
+    for (let x = 0; x < width; x += 2) {
+      const drift = distance * (layer + 1) * 0.014;
+      const y = 101 + layer * 12 + Math.sin((x + drift) / (31 - layer * 3) + layer) * (12 - layer)
+        + Math.sin((x + drift) / 17 + layer * 2) * 3;
+      rect(color, x, y, 2, height - y);
+    }
+  }
+  const travel = distance * 0.01;
+  for (let y = horizon; y < height; y++) {
+    const depth = (y - horizon) / (height - horizon);
+    const edge = 3 + depth * depth * width * 0.26;
+    const stripe = Math.sin(34 / (depth + 0.19) + travel) > 0.65;
+    rect(stripe ? '#a3685c' : '#ac6e5d', center - edge, y, edge * 2, 1);
+  }
+  for (let i = 0; i < 44; i++) {
+    const depth = (noise(i + 91) + travel * 0.22) % 1;
+    const y = horizon + depth ** 2 * (height - horizon);
+    const x = center + (noise(i + 323) - 0.5) * width * depth;
+    rect(i % 2 ? '#dc926d' : '#8f5355', x, y, 1 + depth * 7, 1);
+  }
+}
+
+const rider = [
+  '.......d.d.......','.......ddd.......','......dbbd.......',
+  '......bbbbd......','......dkkd.......','.....dkkkdd......',
+  '.....kkkkkd......','....kkllkkkd.....','...kllkkkdkdd....',
+  '..kllkkkkdkddd...','...kkkkkddoddd...','....kkkkdooodd...',
+  '.....dkkdooodd...','....dddooooodd...','....dddoooodd....',
+  '.....ddooooqd....','.....ddoooqdd....','......ddqqdd.....',
+  '......ddddd......','......dd.dd......','......dd.dd......'
+];
+const palette = { d:'#261b34', b:'#e8a771', k:'#308e89', l:'#76c4a7', o:'#613e54', q:'#412840' };
+
+function drawRider(time) {
+  const step = state === 'running' ? Math.floor(time / 85) % 4 : 0;
+  const y = feet - rider.length * 2 - jump - (step % 2);
+  rect('#784952', center - 15, feet + 1, 30, 3);
+  rider.forEach((row, dy) => [...row].forEach((pixel, dx) => {
+    if (pixel !== '.') rect(palette[pixel], center - 17 + dx * 2, y + dy * 2, 2, 2);
+  }));
+  rect('#261b34', center - 5, y + 41, 3, 3 + step);
+  rect('#261b34', center + 3, y + 41, 3, 6 - step);
+}
+
+function drawRock(rock) {
+  const depth = Math.max(0, (1 - rock.z / 430));
+  const y = horizon + depth ** 2 * (feet - horizon);
+  const size = Math.max(1, depth ** 2 * rock.size);
+  const x = center - size / 2;
+  rect('#774653', x - 2, y, size + 4, size * 0.18);
+  rect('#50334c', x, y - size * 0.6, size, size * 0.6);
+  rect('#714957', x + size * 0.15, y - size * 0.82, size * 0.65, size * 0.47);
+  rect('#eda177', x + size * 0.18, y - size * 0.82, size * 0.46, size * 0.13);
+}
+
+function startOrJump() {
+  if (state !== 'running') {
+    state = 'running';
+    distance = jump = velocity = 0;
+    speed = 120;
+    nextRock = 195;
+    rocks = [{ z: 360, size: 20 }];
+    menu.hidden = true;
+    scoreLabel.textContent = '0 m';
+    return;
+  }
+  if (jump === 0) velocity = 155;
+}
+
+play.addEventListener('click', startOrJump);
+canvas.addEventListener('pointerdown', startOrJump);
+window.addEventListener('keydown', event => {
+  if (event.code !== 'Space' && event.code !== 'ArrowUp') return;
+  if (event.code === 'Space' && document.activeElement === play && !menu.hidden) return;
+  event.preventDefault();
+  if (!event.repeat) startOrJump();
+});
+
+function update(dt) {
+  speed = Math.min(260, speed + dt * 3.6);
+  const advance = speed * dt;
+  distance += advance;
+  nextRock -= advance;
+  if (nextRock <= 0) {
+    rocks.push({ z: 430, size: 17 + Math.random() * 8 });
+    nextRock = speed * (1.45 + Math.random() * 0.65);
+  }
+  if (velocity || jump) {
+    jump = Math.max(0, jump + velocity * dt);
+    velocity = jump > 0 ? velocity - 365 * dt : 0;
+  }
+  const score = Math.floor(distance / 8);
+  scoreLabel.textContent = score + ' m';
+  for (const rock of rocks) {
+    rock.z -= advance;
+    if (rock.z <= 11 && rock.z >= -13 && jump < rock.size * 0.72) {
+      state = 'over';
+      best = Math.max(best, score);
+      try { localStorage.setItem('rihla-best', best); } catch {}
+      bestLabel.textContent = best + ' m';
+      message.textContent = 'Your ride ended at ' + score + ' m.';
+      play.textContent = 'Ride again';
+      menu.hidden = false;
+      return;
+    }
+  }
+  rocks = rocks.filter(rock => rock.z > -18);
+}
+
+let previous = performance.now();
+function frame(time) {
+  const dt = Math.min(0.033, (time - previous) / 1000);
+  previous = time;
+  if (state === 'running') update(dt);
+  landscape();
+  for (let i = rocks.length - 1; i >= 0; i--) drawRock(rocks[i]);
+  drawRider(time);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body></html>
