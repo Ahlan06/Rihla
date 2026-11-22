@@ -71,7 +71,9 @@ function groundY(depth) {
   const ahead = 430 * (1 - Math.sqrt(Math.max(0, depth)));
   const rise = elevation(distance + ahead) - elevation(distance);
   const pitch = (elevation(distance + 8) - elevation(distance - 8)) * 2;
-  return horizon + depth * (feet - horizon) + pitch * (1 - depth) - rise * Math.sqrt(depth);
+  const crest = ridgeY(trailX(0), 3);
+  const relief = pitch * (1 - depth) - rise * Math.sqrt(depth);
+  return crest + depth * (feet - crest) + relief * Math.min(1, depth * 2);
 }
 
 function ridgeY(x, layer) {
@@ -226,10 +228,21 @@ function landscape(time) {
     }
     ctx.globalAlpha = 1;
   }
+  // Clip the sand and trail to the visible side of the nearest dune.
+  ctx.beginPath();
+  ctx.moveTo(0, height);
+  for (let x = 0; x < width; x += 2) {
+    const top = Math.round(ridgeY(x, 3));
+    ctx.lineTo(x, top);
+    ctx.lineTo(x + 2, top);
+  }
+  ctx.lineTo(width, height);
+  ctx.closePath();
+  ctx.clip();
   const travel = distance * 0.01;
-  for (let y = horizon; y < height + 36; y++) {
+  for (let y = horizon; y < horizon + (feet - horizon) * 3; y++) {
     const depth = (y - horizon) / (height - horizon);
-    const edge = 3 + depth * depth * width * 0.26;
+    const edge = .5 + depth * depth * width * .26;
     const stripe = Math.sin(34 / (depth + 0.19) + travel) > 0.65;
     const projection = (y - horizon) / (feet - horizon);
     const surface = groundY(projection);
@@ -548,7 +561,9 @@ function frame(time) {
   const dt = Math.min(0.033, (time - previous) / 1000);
   previous = time;
   if (state === 'running') update(dt);
+  ctx.save();
   landscape(time);
+  ctx.restore();
   scenery();
   for (let i = rocks.length - 1; i >= 0; i--) drawRock(rocks[i]);
   drawRider(time);
