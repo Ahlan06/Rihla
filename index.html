@@ -215,7 +215,23 @@ function drawRider(time) {
     Math.round(feet - jump - spriteHeight - bob), spriteWidth, spriteHeight);
 }
 
+function drawGap(gap) {
+  const near = Math.max(0, 1 - gap.z / 430) ** 2;
+  const far = Math.max(0, 1 - (gap.z + gap.length) / 430) ** 2;
+  const front = horizon + near * (feet - horizon);
+  const back = horizon + far * (feet - horizon);
+  const span = Math.max(2, near * width * .27);
+  const left = trailX(near) - span / 2;
+  for (let dx = 0; dx < span; dx += 2) {
+    const notch = Math.sin(dx / span * 23) * near * 1.5;
+    rect('#c59791', left + dx, back + notch - 1, 2, 2);
+    rect('#292136', left + dx, back + notch + 1, 2, Math.max(1, front - back));
+    rect('#e9ae84', left + dx, front + notch, 2, Math.max(1, 2 * near));
+  }
+}
+
 function drawRock(rock) {
+  if (rock.length) return drawGap(rock);
   const depth = Math.max(0, (1 - rock.z / 430));
   const y = horizon + depth ** 2 * (feet - horizon);
   const size = Math.max(1, depth ** 2 * rock.size);
@@ -257,8 +273,10 @@ function update(dt) {
   distance += advance;
   nextRock -= advance;
   if (nextRock <= 0) {
-    rocks.push({ z: 430, size: 17 + Math.random() * 8 });
-    nextRock = speed * (1.85 - 0.5 * difficulty + Math.random() * 0.4);
+    const arrivalMetres = (distance + 430) / 8;
+    const canyon = Math.floor(arrivalMetres / 120) % 3 === 1;
+    rocks.push(canyon ? { z: 430, length: speed * .32 } : { z: 430, size: 17 + Math.random() * 8 });
+    nextRock = canyon ? speed * 2.5 : speed * (1.85 - 0.5 * difficulty + Math.random() * 0.4);
   }
   const wasAirborne = jump > 0;
   if (velocity || jump) {
@@ -270,7 +288,10 @@ function update(dt) {
   scoreLabel.textContent = score + ' m';
   for (const rock of rocks) {
     rock.z -= advance;
-    if (rock.z <= 11 && rock.z >= -13 && jump < rock.size * 0.72) {
+    const missed = rock.length
+      ? rock.z <= 0 && rock.z >= -rock.length && jump <= 0
+      : rock.z <= 11 && rock.z >= -13 && jump < rock.size * 0.72;
+    if (missed) {
       state = 'over';
       best = Math.max(best, score);
       try { localStorage.setItem('rihla-best', best); } catch {}
@@ -281,7 +302,7 @@ function update(dt) {
       return;
     }
   }
-  rocks = rocks.filter(rock => rock.z > -18);
+  rocks = rocks.filter(rock => rock.z > -(rock.length || 0) - 18);
 }
 
 let previous = performance.now();
