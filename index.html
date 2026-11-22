@@ -3,16 +3,16 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="A pixel-art endless ride through moonlit dunes.">
+<meta name="description" content="A pixel-art endless ride through the dunes at dusk.">
 <title>Rihla · رحلة</title>
 <style>
 *{box-sizing:border-box}body{margin:0;color:#fff0ce;background:#101222;font-family:system-ui,sans-serif}main{position:relative;height:100svh;min-height:420px;overflow:hidden}canvas{width:100%;height:100%;display:block;image-rendering:pixelated;touch-action:manipulation}.hud{position:absolute;inset:0 0 auto;display:flex;justify-content:space-between;padding:clamp(16px,4vw,48px);font:700 14px ui-monospace,monospace;letter-spacing:.1em;text-shadow:0 2px #101222;pointer-events:none}.hud strong{display:block;font-size:24px}.menu{position:absolute;top:35%;left:50%;width:min(90%,460px);transform:translate(-50%,-50%);text-align:center;text-shadow:0 3px 10px #101222}.menu[hidden]{display:none}h1{font:900 clamp(52px,12vw,104px)/.95 Georgia,serif;margin:0;letter-spacing:-.05em}.arabic{display:block;color:#ffc997;font:700 25px Georgia,serif;margin-bottom:8px}p{margin:14px 0 20px}button{border:2px solid #fff0ce;background:#ffc997;color:#231726;padding:12px 24px;font:700 16px ui-monospace,monospace;cursor:pointer;box-shadow:4px 4px #432d40}button:focus-visible{outline:3px solid white;outline-offset:5px}.hint{position:absolute;bottom:18px;left:50%;transform:translateX(-50%);white-space:nowrap;background:#221a2cdd;padding:8px 12px;font:14px ui-monospace,monospace;pointer-events:none}
 </style>
 </head>
 <body><main>
-<canvas aria-label="A rider seen from behind on a moonlit desert trail"></canvas>
+<canvas aria-label="A rider seen from behind on a desert trail at dusk"></canvas>
 <div class="hud"><div>DISTANCE<strong id="score">0 m</strong></div><div>BEST<strong id="best">0 m</strong></div></div>
-<section class="menu" id="menu"><span class="arabic" lang="ar">رحلة</span><h1>Rihla</h1><p id="message">Ride the moonlit dunes.</p><button id="play">Start ride</button></section>
+<section class="menu" id="menu"><span class="arabic" lang="ar">رحلة</span><h1>Rihla</h1><p id="message">Ride the dunes at dusk.</p><button id="play">Start ride</button></section>
 <div class="hint">Space / ↑ / tap to jump</div>
 </main>
 <script>
@@ -51,16 +51,9 @@ function noise(number) {
   return value - Math.floor(value);
 }
 
-function pixelDisk(x, y, radius, color) {
-  for (let row = -radius; row <= radius; row++) {
-    const span = Math.floor(Math.sqrt(radius * radius - row * row));
-    rect(color, x - span, y + row, span * 2 + 1, 1);
-  }
-}
-
 function landscape() {
   const sky = ctx.createLinearGradient(0, 0, 0, 150);
-  ['#10132b', '#2d2349', '#80465d', '#d98670'].forEach((color, i) =>
+  ['#332d53', '#655071', '#b65e63', '#ef9d59'].forEach((color, i) =>
     sky.addColorStop(i / 3, color));
   ctx.fillStyle = sky;
   ctx.fillRect(0, 0, width, height);
@@ -68,11 +61,21 @@ function landscape() {
     const size = i % 13 === 0 ? 2 : 1;
     rect(i % 3 === 0 ? '#f9ca9a' : '#a78ba9', noise(i) * width, noise(i + 800) * 95, size, size);
   }
-  const moonX = width * 0.73;
-  pixelDisk(moonX, 49, 22, '#ffc693');
-  pixelDisk(moonX + 8, 44, 19, '#302545');
+  for (let band = 0; band < 10; band++) {
+    const start = noise(band + 211) * (width + 110) - 80;
+    const length = 45 + noise(band + 51) * 110;
+    const baseline = 7 + band * 8;
+    for (let dx = 0; dx < length; dx += 2) {
+      const taper = Math.sin(dx / length * Math.PI);
+      const ripple = Math.sin(dx / 12 + band) * 3 + Math.sin(dx / 5) * 2;
+      const top = baseline + ripple - taper * (5 + band % 4);
+      const thickness = taper * (5 + 4 * noise(band + 9));
+      rect(band > 4 ? '#bf6962' : '#8c5366', start + dx, top, 2, thickness);
+      if (thickness > 2) rect(band > 4 ? '#eb9660' : '#bd6c65', start + dx, top + thickness - 1, 2, 2);
+    }
+  }
   for (let layer = 0; layer < 4; layer++) {
-    const color = ['#56354e', '#754454', '#a55d5b', '#c17a60'][layer];
+    const color = ['#58435f', '#694762', '#935862', '#ba7465'][layer];
     for (let x = 0; x < width; x += 2) {
       const drift = distance * (layer + 1) * 0.014;
       const y = 101 + layer * 12 + Math.sin((x + drift) / (31 - layer * 3) + layer) * (12 - layer)
@@ -95,16 +98,6 @@ function landscape() {
   }
 }
 
-const horse = [
-  '.......e.....e.......','.......ee...ee.......','........em.me........',
-  '........mmmmm........','.........mmm.........','........bmmmb........',
-  '.......bbmmmbb.......','......bbbbbbbbb......','.....bbbbbbbbbbb.....',
-  '.....bbbccccbbbb.....','....bbbccccccbbbb....','....bbccbbbbccbbb....',
-  '....bbcbllllbcbbb....','....bbblhhllbbbbb....','....bblhhhhllbbbb....',
-  '.....blhhhhhlbbb.....','.....bblllllbbb......','......bbbbbbbb.......',
-  '.......bbbbb.........'
-];
-const horseColors = { e:'#9e6957', m:'#382337', b:'#583446', c:'#744453', l:'#a96858', h:'#c58265' };
 const gallop = [[-5, 1, -3, -3], [-2, -4, 1, -5], [0, -2, 4, 1], [-3, 0, -2, 2]];
 const dust = [];
 let stride = 0;
@@ -174,24 +167,43 @@ function drawRider(time) {
     rect('#2d2031', ankle - 1, hoof, 6, 3);
   });
 
-  horse.forEach((row, dy) => [...row].forEach((pixel, dx) => {
-    if (pixel !== '.') rect(horseColors[pixel], x - 21 + dx * 2, y + 5 + dy * 2, 2, 2);
-  }));
+  const shape = (color, points) => pixelShape(color, points.map(([dx, dy]) => [x + dx, y + dy]));
+  const outline = '#17141e';
+  const coat = '#29232c';
 
-  // The tail and cloak follow the stride independently of the horse's body.
-  rect('#382337', x - 2, y + 33, 5, 6);
-  rect('#382337', x + sway - 2, y + 38, 5, 5);
-  rect('#513047', x + sway * 2 - 2, y + 42, 4, 4);
+  // A raised neck and offset head give the rear silhouette a three-quarter view.
+  shape(outline, [[-18,34],[-16,25],[-11,21],[3,20],[10,16],[13,9],[16,7],
+    [16,1],[19,3],[20,7],[24,8],[26,4],[28,4],[28,12],[33,18],
+    [33,22],[28,23],[23,19],[20,18],[18,31],[13,39],[6,43],[-7,43],[-15,39]]);
+  shape(coat, [[-16,33],[-13,25],[-5,23],[8,25],[15,21],[19,12],
+    [24,12],[29,19],[26,20],[21,15],[17,29],[13,36],[5,40],[-8,41],[-14,38]]);
+  shape('#3b3038', [[-15,31],[-10,25],[-3,25],[1,29],[-4,31],[-8,37],[-13,36]]);
+  shape('#362a30', [[14,22],[17,12],[20,9],[24,10],[21,13],[19,17],[18,24],[15,29]]);
+  shape('#594035', [[17,14],[20,13],[23,16],[27,18],[32,19],[31,21],
+    [27,20],[24,18],[20,16],[18,17]]);
+  rect('#a98467', x + 24, y + 13, 1, 1);
+  shape(outline, [[-8,36],[-5,37],[-6,43],[-8+sway,48],[-12+sway,50],
+    [-13+sway,47],[-10,43]]);
+  shape('#42303a', [[-8,39],[-7,40],[-9,45],[-11+sway,48],[-10+sway,44]]);
 
-  pixelShape('#256866', [[x-6,y+11],[x+5,y+10],[x+9,y+20],[x+sway+9,y+28],
-    [x+sway+4,y+31],[x+sway-10,y+29],[x-9,y+20]]);
-  pixelShape('#419e8e', [[x-5,y+12],[x+2,y+11],[x+2,y+21],[x+sway-2,y+28],
-    [x+sway-9,y+27],[x-6,y+19]]);
-  rect('#76c4a7', x - 7, y + 12, 2, 9);
-  rect('#b5745c', x - 5, y + 4, 10, 7);
-  rect('#edb47f', x - 4, y + 2, 8, 4);
-  rect('#e5a977', x - 6, y + 5, 12, 2);
-  rect('#d3976e', x + 2, y + 8, 3, 5);
+  // Layered fabric folds and a narrow rim light catch the sunset.
+  shape('#251a1d', [[-10,8],[-4,5],[4,7],[9,14],[10,20],[13,25],[11,30],
+    [6,31],[3,28],[-1+sway,35],[-10+sway,38],[-17+sway,35],[-17,28],[-14,19]]);
+  shape('#503124', [[-9,10],[-4,7],[4,9],[7,15],[7,22],[10,26],[7,29],
+    [2,25],[-2+sway,32],[-9+sway,36],[-15+sway,34],[-15,28],[-12,18]]);
+  shape('#714629', [[-12,15],[-8,10],[-2,9],[4,13],[2,15],[-5,13],[-10,17],
+    [-11,26],[-9+sway,32],[-13+sway,34],[-14,28]]);
+  shape('#8b5936', [[-10,15],[-6,12],[-1,12],[2,14],[-5,14],[-9,17],[-11,23]]);
+  shape('#342326', [[-5,16],[-3,16],[-5,23],[-3,27],[-1+sway,29],[-6+sway,34],
+    [-5+sway,30],[-8,25],[-7,20]]);
+  shape('#775036', [[1,16],[4,16],[5,22],[9,25],[8,27],[4,25],[2,21]]);
+  rect('#9c6342', x + 10, y + 24, 3, 2);
+  shape('#17151d', [[-10,6],[-11,1],[-9,-3],[-6,-5],[2,-6],[7,-4],[9,0],
+    [7,4],[7,8],[3,10],[-4,9],[-8,10]]);
+  shape('#32303a', [[-10,1],[-7,-3],[0,-5],[5,-4],[6,-2],[-1,-2],[-6,0]]);
+  shape('#26232d', [[-10,3],[-6,1],[1,0],[7,-1],[7,2],[2,3],[-4,5],[-8,5]]);
+  shape('#805338', [[4,3],[7,2],[8,4],[7,6],[5,6]]);
+  shape('#29242a', [[-9,6],[-4,7],[3,6],[7,5],[7,8],[3,10],[-5,9]]);
 }
 
 function drawRock(rock) {
