@@ -15,6 +15,7 @@
 <section class="menu" id="menu"><span class="arabic" lang="ar">رحلة</span><h1>Rihla</h1><p id="message">Ride the dunes at dusk.</p><button id="play">Start ride</button></section>
 <div class="hint">Space / ↑ / tap to jump</div>
 </main>
+<script src="medina-art.js"></script>
 <script>
 'use strict';
 const canvas = document.querySelector('canvas');
@@ -367,6 +368,51 @@ function medinaHouse(side, depth, variant, tower) {
   ctx.restore();
 }
 
+function drawSouk(time) {
+  const metres = distance / 8 % 360;
+  const amount = Math.max(0, Math.min(1, (metres - 14) / 12, (146 - metres) / 12));
+  if (!amount || !medinaArt.complete || !medinaArt.naturalWidth) return;
+  ctx.save();
+  ctx.globalAlpha = amount;
+  // Keep both shopfronts visible on a phone while retaining a deep central lane.
+  const sway = Math.sin(distance / 170) * 2;
+  ctx.drawImage(medinaArt, -4 + sway, -2, width + 8, height + 4);
+  const clock = time / 1000;
+  const first = Math.floor((distance - 45) / 50);
+  for (let i = first + 9; i >= first; i--) {
+    const z = i * 50 - distance;
+    if (z < -45 || z > 410) continue;
+    const depth = (1 - z / 430) ** 2;
+    const side = i % 2 ? -1 : 1;
+    const x = trailX(depth) + side * (3 + depth * width * .24);
+    const y = groundY(depth);
+    // Passing cobble joints convey forward motion against the painted skyline.
+    rect('#855f51', trailX(depth) - depth * 9, y, 7 * depth, 1);
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(side * depth, depth);
+    const tint = ['#8b4241','#345b63','#9e733d'][Math.abs(i) % 3];
+    const flutter = Math.sin(clock * 3 + i);
+    if (i % 3 === 0) {
+      rect('#4a3134', 7, -17, 1, 18);
+      rect('#68463a', 6, -5, 17, 5);
+      for (let j = 0; j < 5; j++) {
+        rect(j % 2 ? '#dfad76' : tint, 5 + j * 4, -19, 4, 4 + Math.round(flutter + j % 2));
+        rect(j % 2 ? '#d68042' : '#c39a4d', 7 + j * 3, -7, 3, 2);
+      }
+    }
+    const walk = clock * 2.2 + i;
+    ctx.translate(3 + Math.sin(walk * .45) * 3, 0);
+    rect('#3c2d36', -2, -3, 2, 3 + Math.sin(walk));
+    rect('#3c2d36', 1, -3, 2, 3 - Math.sin(walk));
+    rect(tint, -2, -10, 5, 8);
+    rect('#c98f66', -1, -13, 3, 3);
+    rect('#dfc8a2', -2, -14, 4, 2);
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
 function scenery() {
   const first = Math.max(0, Math.floor((distance - 90) / 160));
   const last = Math.floor((distance + 430) / 160);
@@ -536,6 +582,7 @@ function frame(time) {
   if (state === 'running') update(dt);
   landscape(time);
   scenery();
+  drawSouk(time);
   for (let i = rocks.length - 1; i >= 0; i--) drawRock(rocks[i]);
   drawRider(time);
   requestAnimationFrame(frame);
