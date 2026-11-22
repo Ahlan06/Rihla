@@ -51,9 +51,29 @@ function noise(number) {
   return value - Math.floor(value);
 }
 
+// Each stretch is 120 displayed metres. Crossfade its final 35 metres.
+const deserts = [
+  ['332d53','655071','b65e63','ef9d59','58435f','694762','935862','ba7465','a3685c','ac6e5d'],
+  ['101938','283055','54476c','a17386','383750','48405f','66516c','806470','74566a','805e70'],
+  ['494567','a37484','efab80','ffdc94','876477','a87978','c38970','dca273','b97e64','c58a69']
+].map(colors => colors.map(hex => parseInt(hex, 16)));
+
 function landscape() {
+  const metres = distance / 8;
+  const region = Math.floor(metres / 120) % deserts.length;
+  const next = (region + 1) % deserts.length;
+  const blend = Math.max(0, (metres % 120 - 85) / 35);
+  const colors = deserts[region].map((value, i) => {
+    const target = deserts[next][i];
+    const channels = [16, 8, 0].map(shift => {
+      const a = (value >> shift) & 255, b = (target >> shift) & 255;
+      return Math.round(a + (b - a) * blend);
+    });
+    return 'rgb(' + channels.join(',') + ')';
+  });
+  const weight = id => (region === id ? 1 - blend : 0) + (next === id ? blend : 0);
   const sky = ctx.createLinearGradient(0, 0, 0, 150);
-  ['#332d53', '#655071', '#b65e63', '#ef9d59'].forEach((color, i) =>
+  colors.slice(0, 4).forEach((color, i) =>
     sky.addColorStop(i / 3, color));
   ctx.fillStyle = sky;
   ctx.fillRect(0, 0, width, height);
@@ -75,20 +95,35 @@ function landscape() {
     }
   }
   for (let layer = 0; layer < 4; layer++) {
-    const color = ['#58435f', '#694762', '#935862', '#ba7465'][layer];
+    const color = colors[4 + layer];
     for (let x = 0; x < width; x += 2) {
       const drift = distance * (layer + 1) * 0.014;
       const y = 101 + layer * 12 + Math.sin((x + drift) / (31 - layer * 3) + layer) * (12 - layer)
         + Math.sin((x + drift) / 17 + layer * 2) * 3;
-      rect(color, x, y, 2, height - y);
+      const cliffs = layer === 1 ? weight(1) * Math.max(0, Math.min(27, 80 * Math.sin((x + drift) / 26))) : 0;
+      rect(color, x, y - cliffs, 2, height - y + cliffs);
     }
+  }
+  if (weight(2) > 0) {
+    ctx.globalAlpha = weight(2);
+    const origin = -((distance * .024) % 160);
+    for (let x = origin; x < width; x += 160) {
+      rect(colors[5], x, 103, 32, 7);
+      for (const offset of [0, 11, 26]) {
+        const top = offset === 11 ? 88 : 83;
+        rect(colors[5], x + offset, top, 5, 110 - top);
+        rect(colors[4], x + offset - 1, top, 7, 2);
+      }
+      rect(colors[4], x - 1, 81, 12, 3);
+    }
+    ctx.globalAlpha = 1;
   }
   const travel = distance * 0.01;
   for (let y = horizon; y < height; y++) {
     const depth = (y - horizon) / (height - horizon);
     const edge = 3 + depth * depth * width * 0.26;
     const stripe = Math.sin(34 / (depth + 0.19) + travel) > 0.65;
-    rect(stripe ? '#a3685c' : '#ac6e5d', center - edge, y, edge * 2, 1);
+    rect(stripe ? colors[8] : colors[9], center - edge, y, edge * 2, 1);
   }
   for (let i = 0; i < 44; i++) {
     const depth = (noise(i + 91) + travel * 0.22) % 1;
@@ -206,13 +241,14 @@ window.addEventListener('keydown', event => {
 });
 
 function update(dt) {
-  speed = Math.min(260, speed + dt * 3.6);
+  const difficulty = Math.min(1, distance / (8 * 600));
+  speed = 120 + 150 * difficulty;
   const advance = speed * dt;
   distance += advance;
   nextRock -= advance;
   if (nextRock <= 0) {
     rocks.push({ z: 430, size: 17 + Math.random() * 8 });
-    nextRock = speed * (1.45 + Math.random() * 0.65);
+    nextRock = speed * (1.85 - 0.5 * difficulty + Math.random() * 0.4);
   }
   const wasAirborne = jump > 0;
   if (velocity || jump) {
