@@ -158,6 +158,26 @@ for (let y = -13; y <= 13; y++) {
   }
 }
 
+function drawPyramids(timeOfNight) {
+  const drift = Math.sin(distance / 1800) * 4;
+  const origin = width * .69 - drift;
+  const unit = Math.min(1.35, width / 190);
+  ctx.save();
+  ctx.globalAlpha = .84;
+  for (const [offset, altitude, baseline] of [[-23, 11, 99], [21, 15, 102], [0, 25, 104]]) {
+    const peak = Math.round(origin + offset * unit);
+    const size = Math.round(altitude * unit);
+    for (let row = 0; row <= size; row++) {
+      const edge = Math.round(row * .92);
+      const seam = Math.round(row * .22);
+      const y = baseline - size + row;
+      rect(timeOfNight > .5 ? '#625575' : '#bc846f', peak - edge, y, edge + seam + 1, 1);
+      rect(timeOfNight > .5 ? '#463d59' : '#825865', peak + seam, y, edge - seam + 1, 1);
+    }
+  }
+  ctx.restore();
+}
+
 function landscape(time) {
   const metres = distance / 8;
   const region = Math.floor(metres / 120) % deserts.length;
@@ -197,6 +217,7 @@ function landscape(time) {
     }
   }
   shootingStars(time - skyTime);
+  drawPyramids(weight(1));
   for (let layer = 0; layer < 4; layer++) {
     const color = colors[4 + layer];
     for (let x = 0; x < width; x += 2) {
