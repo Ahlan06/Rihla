@@ -62,6 +62,18 @@ function trailX(depth) {
   return center + Math.min(width * .22, 55) * (1 - 1.55 * depth);
 }
 
+function elevation(position) {
+  return 30 * Math.sin(position / 175) + 9 * Math.sin(position / 91);
+}
+
+// Project the height difference relative to the horse, including camera pitch.
+function groundY(depth) {
+  const ahead = 430 * (1 - Math.sqrt(Math.max(0, depth)));
+  const rise = elevation(distance + ahead) - elevation(distance);
+  const pitch = (elevation(distance + 8) - elevation(distance - 8)) * 2;
+  return horizon + depth * (feet - horizon) - rise * Math.sqrt(depth) + pitch * (1 - depth);
+}
+
 function landscape() {
   const metres = distance / 8;
   const region = Math.floor(metres / 120) % deserts.length;
@@ -123,17 +135,22 @@ function landscape() {
     ctx.globalAlpha = 1;
   }
   const travel = distance * 0.01;
-  for (let y = horizon; y < height; y++) {
+  for (let y = horizon; y < height + 36; y++) {
     const depth = (y - horizon) / (height - horizon);
     const edge = 3 + depth * depth * width * 0.26;
     const stripe = Math.sin(34 / (depth + 0.19) + travel) > 0.65;
-    rect(stripe ? colors[8] : colors[9], trailX((y - horizon) / (feet - horizon)) - edge, y, edge * 2, 1);
+    const projection = (y - horizon) / (feet - horizon);
+    const surface = groundY(projection);
+    const nextRow = groundY(projection + 1 / (feet - horizon));
+    const thickness = Math.max(1, Math.ceil(nextRow - surface) + 1);
+    rect(stripe ? colors[8] : colors[9], trailX(projection) - edge, surface, edge * 2, thickness);
   }
   for (let i = 0; i < 44; i++) {
     const depth = (noise(i + 91) + travel * 0.22) % 1;
     const y = horizon + depth ** 2 * (height - horizon);
     const x = trailX((y - horizon) / (feet - horizon)) + (noise(i + 323) - 0.5) * width * depth;
-    rect(i % 2 ? '#dc926d' : '#8f5355', x, y, 1 + depth * 7, 1);
+    const surface = groundY((y - horizon) / (feet - horizon));
+    rect(i % 2 ? '#dc926d' : '#8f5355', x, surface, 1 + depth * 7, 1);
   }
 }
 
@@ -218,8 +235,8 @@ function drawRider(time) {
 function drawGap(gap) {
   const near = Math.max(0, 1 - gap.z / 430) ** 2;
   const far = Math.max(0, 1 - (gap.z + gap.length) / 430) ** 2;
-  const front = horizon + near * (feet - horizon);
-  const back = horizon + far * (feet - horizon);
+  const front = groundY(near);
+  const back = groundY(far);
   const span = Math.max(2, near * width * .27);
   const left = trailX(near) - span / 2;
   for (let dx = 0; dx < span; dx += 2) {
@@ -233,7 +250,7 @@ function drawGap(gap) {
 function drawRock(rock) {
   if (rock.length) return drawGap(rock);
   const depth = Math.max(0, (1 - rock.z / 430));
-  const y = horizon + depth ** 2 * (feet - horizon);
+  const y = groundY(depth ** 2);
   const size = Math.max(1, depth ** 2 * rock.size);
   const x = trailX(depth ** 2) - size * .08;
   rect('#563849', x - size * .22, y - 1, size * 1.4, Math.max(1, size * .17));
@@ -268,7 +285,8 @@ window.addEventListener('keydown', event => {
 
 function update(dt) {
   const difficulty = Math.min(1, distance / (8 * 600));
-  speed = 120 + 150 * difficulty;
+  const slope = (elevation(distance + 8) - elevation(distance - 8)) / 16;
+  speed = (120 + 150 * difficulty) * (1 - .42 * slope);
   const advance = speed * dt;
   distance += advance;
   nextRock -= advance;
