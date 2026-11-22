@@ -140,6 +140,22 @@ function shootingStars(time) {
   ctx.restore();
 }
 
+// Rasterize once so the lunar markings stay fixed as the dunes scroll.
+const moon = document.createElement('canvas');
+moon.width = moon.height = 27;
+const moonPaint = moon.getContext('2d');
+const lunarTones = ['#b59167', '#c6a477', '#d3b387', '#dfc298', '#ecd2a6'];
+for (let y = -13; y <= 13; y++) {
+  for (let x = -13; x <= 13; x++) {
+    if (x * x + y * y > 164) continue;
+    const crater = Math.sin(x * .57 + Math.cos(y * .65)) + Math.cos(y * .71 - x * .21);
+    const grain = noise((x + 13) + 27 * (y + 13));
+    const shade = 2.2 + crater * .58 + grain * .95 - (x + y) / 25;
+    moonPaint.fillStyle = lunarTones[Math.max(0, Math.min(4, Math.floor(shade)))];
+    moonPaint.fillRect(x + 13, y + 13, 1, 1);
+  }
+}
+
 function landscape(time) {
   const metres = distance / 8;
   const region = Math.floor(metres / 120) % deserts.length;
@@ -163,6 +179,8 @@ function landscape(time) {
     const size = i % 13 === 0 ? 2 : 1;
     rect(i % 3 === 0 ? '#f9ca9a' : '#a78ba9', noise(i) * width, noise(i + 800) * 95, size, size);
   }
+  const moonX = Math.round(width * .26) - 13;
+  ctx.drawImage(moon, moonX, 22);
   for (let band = 0; band < 10; band++) {
     const start = noise(band + 211) * (width + 110) - 80;
     const length = 45 + noise(band + 51) * 110;
