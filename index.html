@@ -95,26 +95,103 @@ function landscape() {
   }
 }
 
-const rider = [
-  '.......d.d.......','.......ddd.......','......dbbd.......',
-  '......bbbbd......','......dkkd.......','.....dkkkdd......',
-  '.....kkkkkd......','....kkllkkkd.....','...kllkkkdkdd....',
-  '..kllkkkkdkddd...','...kkkkkddoddd...','....kkkkdooodd...',
-  '.....dkkdooodd...','....dddooooodd...','....dddoooodd....',
-  '.....ddooooqd....','.....ddoooqdd....','......ddqqdd.....',
-  '......ddddd......','......dd.dd......','......dd.dd......'
+const horse = [
+  '.......e.....e.......','.......ee...ee.......','........em.me........',
+  '........mmmmm........','.........mmm.........','........bmmmb........',
+  '.......bbmmmbb.......','......bbbbbbbbb......','.....bbbbbbbbbbb.....',
+  '.....bbbccccbbbb.....','....bbbccccccbbbb....','....bbccbbbbccbbb....',
+  '....bbcbllllbcbbb....','....bbblhhllbbbbb....','....bblhhhhllbbbb....',
+  '.....blhhhhhlbbb.....','.....bblllllbbb......','......bbbbbbbb.......',
+  '.......bbbbb.........'
 ];
-const palette = { d:'#261b34', b:'#e8a771', k:'#308e89', l:'#76c4a7', o:'#613e54', q:'#412840' };
+const horseColors = { e:'#9e6957', m:'#382337', b:'#583446', c:'#744453', l:'#a96858', h:'#c58265' };
+const gallop = [[-5, 1, -3, -3], [-2, -4, 1, -5], [0, -2, 4, 1], [-3, 0, -2, 2]];
+const dust = [];
+let stride = 0;
+
+function scatterDust(count, strength) {
+  for (let i = 0; i < count; i++) {
+    const side = i % 2 ? 1 : -1;
+    dust.push({
+      x: side * (4 + Math.random() * 7),
+      y: 1 + Math.random() * 3,
+      vx: side * (12 + Math.random() * strength),
+      vy: -5 - Math.random() * 14,
+      life: 0.25 + Math.random() * 0.2
+    });
+  }
+}
+
+function tickAnimation(dt, landed) {
+  const phase = Math.floor(stride);
+  stride += dt * (8 + speed / 22);
+  if (landed) scatterDust(12, 30);
+  else if (!jump && Math.floor(stride) !== phase) scatterDust(2, 10);
+
+  for (const grain of dust) {
+    grain.x += grain.vx * dt;
+    grain.y += grain.vy * dt;
+    grain.vy += 38 * dt;
+    grain.life -= dt;
+  }
+  while (dust.length && dust[0].life <= 0) dust.shift();
+}
+
+function pixelShape(color, points) {
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  points.forEach(([x, y], i) => {
+    if (i === 0) ctx.moveTo(Math.round(x), Math.round(y));
+    else ctx.lineTo(Math.round(x), Math.round(y));
+  });
+  ctx.closePath();
+  ctx.fill();
+}
 
 function drawRider(time) {
-  const step = state === 'running' ? Math.floor(time / 85) % 4 : 0;
-  const y = feet - rider.length * 2 - jump - (step % 2);
-  rect('#784952', center - 15, feet + 1, 30, 3);
-  rider.forEach((row, dy) => [...row].forEach((pixel, dx) => {
-    if (pixel !== '.') rect(palette[pixel], center - 17 + dx * 2, y + dy * 2, 2, 2);
+  const running = state === 'running';
+  const phase = Math.floor(stride) % gallop.length;
+  const legs = jump ? [-7, -6, -6, -7] : running ? gallop[phase] : [0, 0, 0, 0];
+  const bob = running && !jump ? [0, 2, 1, 0][phase] : 0;
+  const sway = Math.round(Math.sin(time / (running ? 76 : 290)) * (running ? 3 : 1));
+  const x = Math.round(center);
+  const y = Math.round(feet - 49 - jump - bob);
+
+  rect('#784952', x - 15 + jump * 0.12, feet + 1, 30 - jump * 0.24, 3);
+  for (const grain of dust) {
+    if (grain.life > 0) {
+      rect(grain.life > 0.18 ? '#e5a27c' : '#bc806a', x + grain.x, feet + grain.y, grain.life > 0.25 ? 3 : 2, 2);
+    }
+  }
+
+  legs.forEach((lift, i) => {
+    const hip = x + [-12, 9, -8, 6][i];
+    const ankle = hip + (i % 2 ? 2 : -2);
+    const hoof = y + 47 + lift;
+    const color = i < 2 ? '#43293c' : '#663d49';
+    rect(color, hip, y + 31, 4, 9 + lift / 2);
+    rect(color, ankle, y + 37 + lift / 2, 4, hoof - (y + 37 + lift / 2));
+    rect('#2d2031', ankle - 1, hoof, 6, 3);
+  });
+
+  horse.forEach((row, dy) => [...row].forEach((pixel, dx) => {
+    if (pixel !== '.') rect(horseColors[pixel], x - 21 + dx * 2, y + 5 + dy * 2, 2, 2);
   }));
-  rect('#261b34', center - 5, y + 41, 3, 3 + step);
-  rect('#261b34', center + 3, y + 41, 3, 6 - step);
+
+  // The tail and cloak follow the stride independently of the horse's body.
+  rect('#382337', x - 2, y + 33, 5, 6);
+  rect('#382337', x + sway - 2, y + 38, 5, 5);
+  rect('#513047', x + sway * 2 - 2, y + 42, 4, 4);
+
+  pixelShape('#256866', [[x-6,y+11],[x+5,y+10],[x+9,y+20],[x+sway+9,y+28],
+    [x+sway+4,y+31],[x+sway-10,y+29],[x-9,y+20]]);
+  pixelShape('#419e8e', [[x-5,y+12],[x+2,y+11],[x+2,y+21],[x+sway-2,y+28],
+    [x+sway-9,y+27],[x-6,y+19]]);
+  rect('#76c4a7', x - 7, y + 12, 2, 9);
+  rect('#b5745c', x - 5, y + 4, 10, 7);
+  rect('#edb47f', x - 4, y + 2, 8, 4);
+  rect('#e5a977', x - 6, y + 5, 12, 2);
+  rect('#d3976e', x + 2, y + 8, 3, 5);
 }
 
 function drawRock(rock) {
@@ -131,7 +208,8 @@ function drawRock(rock) {
 function startOrJump() {
   if (state !== 'running') {
     state = 'running';
-    distance = jump = velocity = 0;
+    distance = jump = velocity = stride = 0;
+    dust.length = 0;
     speed = 120;
     nextRock = 195;
     rocks = [{ z: 360, size: 20 }];
@@ -160,10 +238,12 @@ function update(dt) {
     rocks.push({ z: 430, size: 17 + Math.random() * 8 });
     nextRock = speed * (1.45 + Math.random() * 0.65);
   }
+  const wasAirborne = jump > 0;
   if (velocity || jump) {
     jump = Math.max(0, jump + velocity * dt);
     velocity = jump > 0 ? velocity - 365 * dt : 0;
   }
+  tickAnimation(dt, wasAirborne && jump === 0);
   const score = Math.floor(distance / 8);
   scoreLabel.textContent = score + ' m';
   for (const rock of rocks) {
