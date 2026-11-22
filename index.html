@@ -115,6 +115,23 @@ function windSand(time, layer) {
   ctx.globalAlpha = 1;
 }
 
+function shootingStars(time, night) {
+  const cycle = Math.floor(time / 6800);
+  const age = (time % 6800 - 1400 - noise(cycle + 42) * 1400) / 1050;
+  if (age < 0 || age > 1) return;
+  const range = Math.min(width * .28, 64);
+  const start = 6 + noise(cycle + 301) * (width - range - 14);
+  const y = 8 + noise(cycle + 909) * 32;
+  ctx.save();
+  for (let i = 12; i >= 0; i--) {
+    const t = age - i * .022;
+    if (t < 0) continue;
+    ctx.globalAlpha = Math.min(1, age * 12, (1 - age) * 5) * (1 - i / 13) * (.75 + night * .25);
+    rect(i < 2 ? '#fff4cb' : '#f4cbb8', start + range * t, y + 19 * t, i === 0 ? 2 : 1, 1);
+  }
+  ctx.restore();
+}
+
 function landscape(time) {
   const metres = distance / 8;
   const region = Math.floor(metres / 120) % deserts.length;
@@ -138,6 +155,7 @@ function landscape(time) {
     const size = i % 13 === 0 ? 2 : 1;
     rect(i % 3 === 0 ? '#f9ca9a' : '#a78ba9', noise(i) * width, noise(i + 800) * 95, size, size);
   }
+  shootingStars(time, weight(1));
   for (let band = 0; band < 10; band++) {
     const start = noise(band + 211) * (width + 110) - 80;
     const length = 45 + noise(band + 51) * 110;
