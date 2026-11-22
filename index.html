@@ -184,6 +184,12 @@ function landscape(time) {
       const y = ridgeY(x, layer);
       const cliffs = layer === 1 ? (.22 + .78 * weight(1)) * Math.max(0, Math.min(27, 80 * Math.sin((x + drift) / 26))) : 0;
       rect(color, x, y - cliffs, 2, height - y + cliffs);
+      if (layer >= 2) {
+        const slope = (ridgeY(x + 2, layer) - y) / 2;
+        ctx.globalAlpha = Math.min(.34, Math.abs(slope) * .28) * (1 - .55 * weight(1));
+        rect(slope > 0 ? '#ffc487' : '#423357', x, y, 2, 4 + layer + Math.abs(slope) * 7);
+        ctx.globalAlpha = 1;
+      }
     }
     if (layer === 0) drawCaravan(time);
     if (layer === 2) windSand(time, layer);
@@ -225,11 +231,10 @@ function landscape(time) {
 const dust = [];
 let stride = 0;
 
-function scatterDust(count, strength) {
+function scatterDust(count, strength, side) {
   for (let i = 0; i < count; i++) {
-    const side = i % 2 ? 1 : -1;
     dust.push({
-      x: side * (4 + Math.random() * 7),
+      x: side * (5 + Math.random() * 2),
       y: 1 + Math.random() * 3,
       vx: side * (12 + Math.random() * strength),
       vy: -5 - Math.random() * 14,
@@ -243,8 +248,15 @@ function tickAnimation(dt, landed) {
   landing = landed ? .14 : Math.max(0, landing - dt);
   const phase = Math.floor(stride);
   stride += dt * (8 + speed / 22);
-  if (landed) scatterDust(12, 30);
-  else if (!jump && Math.floor(stride) !== phase) scatterDust(2, 10);
+  const hoofPhase = Math.floor(stride) % 6;
+  if (landed) {
+    stride = 0;
+    scatterDust(7, 29, -1);
+    scatterDust(7, 29, 1);
+  } else if (!jump && landing === 0 && Math.floor(stride) !== phase) {
+    if (hoofPhase === 0) scatterDust(3, 12, -1);
+    if (hoofPhase === 3) scatterDust(3, 12, 1);
+  }
 
   for (const grain of dust) {
     grain.x += grain.vx * dt;
@@ -288,14 +300,23 @@ function drawRider(time) {
   const phase = jump ? 6 : landing ? 7 : state === 'running' ? Math.floor(stride) % 6 : 0;
   const riderX = trailX(1);
   const pose = poses[phase];
-  rect('#784952', riderX - 12 + jump * .1, feet, 24 - jump * .2, 3);
+  const downhill = Math.max(0, (elevation(distance - 8) - elevation(distance + 8)) / 16);
+  const shadowLength = 12 + downhill * 48 + jump * .24;
+  ctx.save();
+  ctx.globalAlpha = .44 - jump * .004;
+  for (let row = 0; row < 5; row++) {
+    const span = shadowLength * Math.sqrt(1 - ((row - 2) / 3) ** 2);
+    rect('#462e46', riderX + shadowLength - 12 - span + row, feet + row - 1, span * 2, 1);
+  }
+  ctx.restore();
   for (const grain of dust) {
     if (grain.life > 0) rect('#df9d78', riderX + grain.x, feet + grain.y, 2, 2);
   }
   if (!pose) return;
   const bob = state === 'running' ? Math.sin(stride * Math.PI / 2) * 1.4 : Math.sin(time / 600) * .4;
-  const spriteHeight = 69;
-  const spriteWidth = spriteHeight * pose[2] / pose[3];
+  const compression = landing > 0 ? Math.sin(Math.PI * landing / .14) : 0;
+  const spriteHeight = 69 - 5 * compression;
+  const spriteWidth = (69 + compression) * pose[2] / pose[3];
   ctx.drawImage(mount, ...pose, Math.round(riderX - spriteWidth / 2),
     Math.round(feet - jump - spriteHeight - bob), spriteWidth, spriteHeight);
 }
