@@ -115,20 +115,28 @@ function windSand(time, layer) {
   ctx.globalAlpha = 1;
 }
 
-function shootingStars(time, night) {
-  const cycle = Math.floor(time / 6800);
-  const age = (time % 6800 - 1400 - noise(cycle + 42) * 1400) / 1050;
+let skyTime = 0;
+function shootingStars(time) {
+  const cycle = Math.floor(time / 4400);
+  const age = (time % 4400 - 350) / 1900;
   if (age < 0 || age > 1) return;
-  const range = Math.min(width * .28, 64);
+  const range = Math.min(width * .51, 110);
   const start = 6 + noise(cycle + 301) * (width - range - 14);
-  const y = 8 + noise(cycle + 909) * 32;
+  const y = 22 + noise(cycle + 909) * 18;
+  const headX = start + range * age;
+  const headY = y + age * 24;
   ctx.save();
-  for (let i = 12; i >= 0; i--) {
-    const t = age - i * .022;
+  const opacity = Math.min(1, age * 12, (1 - age) * 7);
+  for (let i = 24; i >= 1; i--) {
+    const t = age - i * .013;
     if (t < 0) continue;
-    ctx.globalAlpha = Math.min(1, age * 12, (1 - age) * 5) * (1 - i / 13) * (.75 + night * .25);
-    rect(i < 2 ? '#fff4cb' : '#f4cbb8', start + range * t, y + 19 * t, i === 0 ? 2 : 1, 1);
+    ctx.globalAlpha = opacity * (1 - i / 26);
+    rect('#ffd694', start + range * t, y + 24 * t, 3, 2);
   }
+  ctx.globalAlpha = opacity;
+  rect('#fff3c8', headX - 3, headY, 7, 1);
+  rect('#fff3c8', headX, headY - 3, 1, 7);
+  rect('#ffffff', headX - 1, headY - 1, 3, 3);
   ctx.restore();
 }
 
@@ -155,7 +163,6 @@ function landscape(time) {
     const size = i % 13 === 0 ? 2 : 1;
     rect(i % 3 === 0 ? '#f9ca9a' : '#a78ba9', noise(i) * width, noise(i + 800) * 95, size, size);
   }
-  shootingStars(time, weight(1));
   for (let band = 0; band < 10; band++) {
     const start = noise(band + 211) * (width + 110) - 80;
     const length = 45 + noise(band + 51) * 110;
@@ -169,6 +176,7 @@ function landscape(time) {
       if (thickness > 2) rect(band > 4 ? '#eb9660' : '#bd6c65', start + dx, top + thickness - 1, 2, 2);
     }
   }
+  shootingStars(time - skyTime);
   for (let layer = 0; layer < 4; layer++) {
     const color = colors[4 + layer];
     for (let x = 0; x < width; x += 2) {
@@ -385,6 +393,7 @@ function drawRock(rock) {
 function startOrJump() {
   if (state !== 'running') {
     state = 'running';
+    skyTime = performance.now();
     distance = jump = velocity = stride = landing = 0;
     dust.length = 0;
     speed = 120;
