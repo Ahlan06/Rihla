@@ -232,6 +232,69 @@ function drawRider(time) {
     Math.round(feet - jump - spriteHeight - bob), spriteWidth, spriteHeight);
 }
 
+// Paint props in world order so the nearest silhouettes overlap distant ones.
+function scenery() {
+  const first = Math.max(0, Math.floor((distance - 90) / 160));
+  const last = Math.floor((distance + 430) / 160);
+  for (let i = last; i >= first; i--) {
+    const z = (i + 1) * 160 - distance;
+    if (z > 430 || z < -90) continue;
+    const scale = (1 - z / 430) ** 2;
+    const side = i % 2 ? 1 : -1;
+    const x = trailX(scale) + side * (8 + (.23 + noise(i + 12) * .08) * width * scale);
+    const y = groundY(scale);
+    ctx.save();
+    ctx.translate(Math.round(x), Math.round(y));
+    ctx.scale(scale, scale);
+    if ((i + 1) % 25 === 0) {
+      for (let row = -6; row <= 6; row++) {
+        const half = Math.sqrt(1 - row * row / 36) * 27;
+        rect(row < 0 ? '#37696e' : '#509797', -half, row, 2 * half, 1);
+      }
+      rect('#97cbb0', -14, 1, 15, 1);
+      palm(-17, -3, .9);
+      palm(13, -4, 1.2);
+    } else if (i % 5 === 2) {
+      for (let row = 0; row < 16; row++) {
+        rect('#784348', -row, -16 + row, row * 2 + 1, 1);
+        rect('#be7753', -row, -16 + row, row + 1, 1);
+        if (row > 8) rect('#382b37', -2, -16 + row, row - 8, 1);
+      }
+      rect('#5b3943', -1, -20, 2, 5);
+      rect('#ffcb86', 17, -3, 2, 3);
+    } else if (i % 3 !== 1) {
+      palm(0, 0, .85 + noise(i + 73) * .4);
+    } else {
+      for (let blade = 0; blade < 7; blade++) {
+        const length = 4 + noise(i + blade) * 7;
+        for (let k = 0; k < length; k++)
+          rect(blade % 2 ? '#7b7053' : '#525b50', (blade - 3) * k * .38, -k, 2, 2);
+      }
+    }
+    ctx.restore();
+  }
+}
+
+function palm(x, y, size) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(size, size);
+  for (let k = 0; k < 26; k++) {
+    const bend = 4 * Math.sin(k / 17);
+    rect(k % 5 < 2 ? '#956751' : '#66494a', bend - 2, -k, 3, 2);
+  }
+  for (let leaf = 0; leaf < 9; leaf++) {
+    const angle = Math.PI * (leaf / 8);
+    for (let k = 0; k < 14; k++) {
+      const dx = 4 + Math.cos(angle) * k * 1.3;
+      const dy = -25 - Math.sin(angle) * k - k * .65 + k * k * .08;
+      rect(leaf % 2 ? '#345c53' : '#496f59', dx, dy, 3, 2);
+      if (k % 3 === 0) rect('#34564d', dx, dy + 2, 1, 3);
+    }
+  }
+  ctx.restore();
+}
+
 function drawGap(gap) {
   const near = Math.max(0, 1 - gap.z / 430) ** 2;
   const far = Math.max(0, 1 - (gap.z + gap.length) / 430) ** 2;
@@ -329,6 +392,7 @@ function frame(time) {
   previous = time;
   if (state === 'running') update(dt);
   landscape();
+  scenery();
   for (let i = rocks.length - 1; i >= 0; i--) drawRock(rocks[i]);
   drawRider(time);
   requestAnimationFrame(frame);
