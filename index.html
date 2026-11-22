@@ -15,7 +15,6 @@
 <section class="menu" id="menu"><span class="arabic" lang="ar">رحلة</span><h1>Rihla</h1><p id="message">Ride the dunes at dusk.</p><button id="play">Start ride</button></section>
 <div class="hint">Space / ↑ / tap to jump</div>
 </main>
-<script src="medina-art.js"></script>
 <script>
 'use strict';
 const canvas = document.querySelector('canvas');
@@ -59,13 +58,8 @@ const deserts = [
   ['494567','a37484','efab80','ffdc94','876477','a87978','c38970','dca273','b97e64','c58a69']
 ].map(colors => colors.map(hex => parseInt(hex, 16)));
 
-function cityBlend(position) {
-  const m = position / 8 % 360;
-  return Math.max(0, Math.min(1, (m - 14) / 12, (146 - m) / 12));
-}
-
 function trailX(depth) {
-  return center + Math.min(width * .22, 55) * (1 - 1.55 * depth) * (1 - cityBlend(distance));
+  return center + Math.min(width * .22, 55) * (1 - 1.55 * depth);
 }
 
 function elevation(position) {
@@ -77,7 +71,7 @@ function groundY(depth) {
   const ahead = 430 * (1 - Math.sqrt(Math.max(0, depth)));
   const rise = elevation(distance + ahead) - elevation(distance);
   const pitch = (elevation(distance + 8) - elevation(distance - 8)) * 2;
-  return horizon + depth * (feet - horizon) + (1 - cityBlend(distance)) * (pitch * (1 - depth) - rise * Math.sqrt(depth));
+  return horizon + depth * (feet - horizon) + pitch * (1 - depth) - rise * Math.sqrt(depth);
 }
 
 function ridgeY(x, layer) {
@@ -373,76 +367,6 @@ function medinaHouse(side, depth, variant, tower) {
   ctx.restore();
 }
 
-function drawSouk(time) {
-  const amount = cityBlend(distance);
-  if (!amount || !medinaArt.complete || !medinaArt.naturalWidth) return;
-  ctx.save();
-  ctx.globalAlpha = amount;
-  const imageW = medinaArt.naturalWidth, imageH = medinaArt.naturalHeight;
-  // The painted skyline ends at the vanishing point. Every near surface moves.
-  const skylineW = Math.max(width, horizon * imageW / imageH);
-  ctx.drawImage(medinaArt, 0, 0, imageW, imageH * .53,
-    center - skylineW / 2, 0, skylineW, horizon + 2);
-  rect('#997768', 0, horizon, width, height - horizon);
-  for (let y = horizon + 1; y < height; y++) {
-    const d = (y - horizon) / (feet - horizon);
-    const world = distance + 430 * (1 - Math.sqrt(d));
-    const row = Math.floor(world / 12);
-    const brick = Math.max(3, 17 * d);
-    if (world % 12 < 1.8) rect('#795f59', 0, y, width, 1);
-    else for (let x = center % brick - brick + (row % 2) * brick / 2; x < width; x += brick)
-      rect('#866961', x, y, 1, 1);
-  }
-  // Trace the two vertical walls in perspective, texture coordinates in world space.
-  const halfLane = Math.max(32, width * .27);
-  for (let col = 0; col < width; col++) {
-    const d = Math.abs(col - center) / halfLane;
-    if (d < .045) continue;
-    const z = 430 * (1 - Math.sqrt(d));
-    const tile = (distance + z) / 170;
-    const along = tile - Math.floor(tile);
-    const u = Math.floor(imageW * (col < center ? .035 + along * .24 : .965 - along * .24));
-    const base = horizon + d * (feet - horizon);
-    const wallHeight = 194 * d;
-    ctx.drawImage(medinaArt, u, imageH * .07, 1, imageH * .84,
-      col, Math.round(base - wallHeight), 1, Math.ceil(wallHeight + 1));
-  }
-  const clock = time / 1000;
-  const first = Math.floor((distance - 45) / 50);
-  for (let i = first + 9; i >= first; i--) {
-    const z = i * 50 - distance;
-    if (z < -45 || z > 410) continue;
-    const depth = (1 - z / 430) ** 2;
-    const side = i % 2 ? -1 : 1;
-    const x = trailX(depth) + side * (3 + depth * width * .24);
-    const y = groundY(depth);
-    // Passing cobble joints convey forward motion against the painted skyline.
-    rect('#855f51', trailX(depth) - depth * 9, y, 7 * depth, 1);
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.scale(side * depth, depth);
-    const tint = ['#8b4241','#345b63','#9e733d'][Math.abs(i) % 3];
-    const flutter = Math.sin(clock * 3 + i);
-    if (i % 3 === 0) {
-      rect('#4a3134', 7, -17, 1, 18);
-      rect('#68463a', 6, -5, 17, 5);
-      for (let j = 0; j < 5; j++) {
-        rect(j % 2 ? '#dfad76' : tint, 5 + j * 4, -19, 4, 4 + Math.round(flutter + j % 2));
-        rect(j % 2 ? '#d68042' : '#c39a4d', 7 + j * 3, -7, 3, 2);
-      }
-    }
-    const walk = clock * 2.2 + i;
-    ctx.translate(3 + Math.sin(walk * .45) * 3, 0);
-    rect('#3c2d36', -2, -3, 2, 3 + Math.sin(walk));
-    rect('#3c2d36', 1, -3, 2, 3 - Math.sin(walk));
-    rect(tint, -2, -10, 5, 8);
-    rect('#c98f66', -1, -13, 3, 3);
-    rect('#dfc8a2', -2, -14, 4, 2);
-    ctx.restore();
-  }
-  ctx.restore();
-}
-
 function scenery() {
   const first = Math.max(0, Math.floor((distance - 90) / 160));
   const last = Math.floor((distance + 430) / 160);
@@ -453,12 +377,8 @@ function scenery() {
     const side = i % 2 ? 1 : -1;
     const x = trailX(scale) + side * (8 + (.23 + noise(i + 12) * .08) * width * scale);
     const y = groundY(scale);
-    // The medina occupies metres 40–100 of each 360 m journey.
-    const street = (i + 1) % 18;
-    if ((i + 1) % 25 !== 0 && street >= 2 && street <= 5) {
-      for (const bank of [-1, 1]) {
-        medinaHouse(bank, scale, (i + bank + 3) % 3, street === 4 && bank === 1);
-      }
+    if ((i + 1) % 25 !== 0 && i % 7 === 2) {
+      medinaHouse(side, scale, i % 3, i % 14 === 9);
       continue;
     }
     ctx.save();
@@ -535,14 +455,6 @@ function drawRock(rock) {
   const size = Math.max(1, depth ** 2 * rock.size);
   const x = trailX(depth ** 2) - size * .08;
   rect('#563849', x - size * .22, y - 1, size * 1.4, Math.max(1, size * .17));
-  if (cityBlend(distance + rock.z) > .45) {
-    rect('#503425', x, y - size * .72, size, size * .72);
-    for (let plank = 0; plank < 3; plank++)
-      rect('#ae7545', x + 1, y - size * (.69 - plank * .22), size - 2, size * .18);
-    rect('#ddab72', x + size * .13, y - size * .7, size * .1, size * .7);
-    rect('#ddab72', x + size * .78, y - size * .7, size * .1, size * .7);
-    return;
-  }
   rect('#50334c', x, y - size * 0.6, size, size * 0.6);
   rect('#714957', x + size * 0.15, y - size * 0.82, size * 0.65, size * 0.47);
   rect('#eda177', x + size * 0.18, y - size * 0.82, size * 0.46, size * 0.13);
@@ -582,7 +494,7 @@ function update(dt) {
   nextRock -= advance;
   if (nextRock <= 0) {
     const arrivalMetres = (distance + 430) / 8;
-    const canyon = Math.floor(arrivalMetres / 120) % 3 === 1 && cityBlend(arrivalMetres * 8) < .45;
+    const canyon = Math.floor(arrivalMetres / 120) % 3 === 1;
     rocks.push(canyon ? { z: 430, length: speed * .32 } : { z: 430, size: 17 + Math.random() * 8 });
     nextRock = canyon ? speed * 2.5 : speed * (1.85 - 0.5 * difficulty + Math.random() * 0.4);
   }
@@ -620,7 +532,6 @@ function frame(time) {
   if (state === 'running') update(dt);
   landscape(time);
   scenery();
-  drawSouk(time);
   for (let i = rocks.length - 1; i >= 0; i--) drawRock(rocks[i]);
   drawRider(time);
   requestAnimationFrame(frame);
