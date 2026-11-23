@@ -500,7 +500,7 @@ const freeUI=document.querySelector('#freeUI'),pad=document.querySelector('#pad'
 const map=document.querySelector('#map').getContext('2d'),keys=new Set();
 let heading=0,worldZ=0,stickX=0,stickY=0,scrollX=0,scrollY=0,drag=null;
 let horseSpeed=0,stridePhase=0;
-function clearInput(){touchBoost=false;horseSpeed=0;stridePhase=0;keys.clear();stickX=stickY=scrollX=scrollY=0;drag=null;stick.style.transform='none'}
+function clearInput(){screenGesture=null;orbitYaw=lookPitch=0;touchBoost=false;horseSpeed=0;stridePhase=0;keys.clear();stickX=stickY=scrollX=scrollY=0;drag=null;stick.style.transform='none'}
 addEventListener('blur',clearInput);
 const mountButton=document.querySelector('#mount');
 let parked=null;
@@ -511,7 +511,7 @@ boostButton.onpointerdown=e=>{
   boostButton.setPointerCapture(e.pointerId);touchBoost=true;
 };
 boostButton.onpointerup=boostButton.onpointercancel=boostButton.onlostpointercapture=()=>{touchBoost=false};
-const ridingHelp='Move forward + hold Shift or Gallop to accelerate · Alt to walk';
+const ridingHelp='Swipe to look · Shift or Gallop to accelerate · Alt to walk';
 function nearHorse(){return parked && Math.hypot(lateral-parked.x,worldZ-parked.z)<2.9}
 function changeMount(){
   if(state!=='free'||jump>0||vy!==0)return;
@@ -528,7 +528,7 @@ function changeMount(){
     if(!spot){document.querySelector('footer').textContent='Find more room beside your horse to dismount.';return}
     parked={x:lateral,z:worldZ,heading};lateral=spot.x;worldZ=spot.z;
     heading=Math.atan2(lateral-parked.x,worldZ-parked.z);
-    document.querySelector('footer').textContent='Move forward + hold Shift or Sprint to run · Return to your horse to mount';
+    document.querySelector('footer').textContent='Swipe to look · Shift or Sprint to run · Return to your horse to mount';
   }
   clearInput();lastCameraState='';
 }
@@ -537,7 +537,7 @@ addEventListener('keydown',e=>{if(state==='free'&&e.code==='KeyE'&&!e.repeat){e.
 function returnMenu(){parked=null;rider.visible=true;state='ready';freeUI.hidden=true;menu.hidden=false;clearInput();dist=lateral=worldZ=heading=jump=vy=0;msg.textContent='Choose your ride.';document.querySelector('footer').textContent='← → or swipe to dodge · Space or tap to jump'}
 document.querySelector('#exit').onclick=returnMenu;
 const explore=document.querySelector('#explore');explore.disabled=false;
-explore.onclick=()=>{returnMenu();state='free';freeUI.hidden=false;menu.hidden=true;document.querySelector('footer').textContent='Move forward + hold Shift or Gallop to accelerate · Alt to walk'};
+explore.onclick=()=>{returnMenu();state='free';freeUI.hidden=false;menu.hidden=true;document.querySelector('footer').textContent='Swipe to look · Shift or Gallop to accelerate · Alt to walk'};
 function joystick(e){
  const box=pad.getBoundingClientRect(),x=(e.clientX-box.left-box.width/2)/36,y=(e.clientY-box.top-box.height/2)/36;
  const length=Math.max(1,Math.hypot(x,y));stickX=x/length;stickY=-y/length;stick.style.transform='translate('+stickX*30+'px,'+(-stickY*30)+'px)';
@@ -562,12 +562,37 @@ function leap(){if(state==='run'&&!jump&&!vy)vy=5.4}
 function move(dir){if(state==='run')lane=Math.max(-1,Math.min(1,lane+dir))}
 go.disabled=false;go.textContent='Start ride';go.onclick=start;
 addEventListener('keydown',e=>{if(state!=='run'||!['ArrowLeft','ArrowRight','ArrowUp','Space'].includes(e.code))return;e.preventDefault();if(e.repeat)return;if(e.code==='ArrowLeft')move(-1);else if(e.code==='ArrowRight')move(1);else leap()});
-let touch=null;canvas.onpointerdown=e=>{touch=e.clientX;canvas.setPointerCapture(e.pointerId)};canvas.onpointerup=e=>{if(touch===null)return;const dx=e.clientX-touch;touch=null;if(Math.abs(dx)>22)move(Math.sign(dx));else leap()};canvas.onpointercancel=()=>touch=null;
+let screenGesture=null, orbitYaw=0, lookPitch=0;
+canvas.onpointerdown=e=>{
+  if(screenGesture || !['run','free'].includes(state) || e.button!==0)return;
+  screenGesture={id:e.pointerId,x:e.clientX,y:e.clientY,mode:state};
+  canvas.setPointerCapture(e.pointerId);
+};
+canvas.onpointermove=e=>{
+  const g=screenGesture;
+  if(!g||g.id!==e.pointerId||g.mode!=='free'||state!=='free')return;
+  const sensitivity=2.9/Math.max(280,Math.min(canvas.clientWidth,canvas.clientHeight));
+  const yaw=(e.clientX-g.x)*sensitivity;
+  if(parked)heading-=yaw;else orbitYaw-=yaw;
+  lookPitch=T.MathUtils.clamp(lookPitch-(e.clientY-g.y)*sensitivity,-.65,.65);
+  g.x=e.clientX;g.y=e.clientY;
+};
+canvas.onpointerup=e=>{
+  const g=screenGesture;
+  if(!g||g.id!==e.pointerId)return;
+  screenGesture=null;
+  if(g.mode==='run'&&state==='run'){
+    const dx=e.clientX-g.x;if(Math.abs(dx)>22)move(Math.sign(dx));else leap();
+  }
+};
+canvas.onpointercancel=canvas.onlostpointercapture=e=>{
+  if(screenGesture?.id===e.pointerId)screenGesture=null;
+};
 const boomRay=new T.Raycaster(), pivot=new T.Vector3(), desired=new T.Vector3(), direction=new T.Vector3();
 const nearby=new Set(), intersections=[];
 let cameraHeading=0, boomLength=8, lastCameraState='';
 function followRider(dt,z,ground){
-  const free=state==='free', yaw=free?heading:0;
+  const free=state==='free', yaw=free?heading+orbitYaw:0;
   const reset=state!==lastCameraState;
   lastCameraState=state;
   const yawError=Math.atan2(Math.sin(yaw-cameraHeading),Math.cos(yaw-cameraHeading));
@@ -578,7 +603,7 @@ function followRider(dt,z,ground){
   const lift=3.95+portrait*.85;
   const vault=free?(1-T.MathUtils.smoothstep(Math.abs(lateral),3.3,4.2))*T.MathUtils.smoothstep(-z,159,165)*(1-T.MathUtils.smoothstep(-z,169,173)):0;
   pivot.set(lateral,ground+jump+3.23,z);
-  desired.set(lateral+sn*depth+cs*.45,ground+jump*.55+lift,z+cs*depth-sn*.45);
+  desired.set(lateral+sn*depth+cs*.45,ground+jump*.55+lift-depth*Math.sin(lookPitch),z+cs*depth-sn*.45);
   desired.y=Math.max(desired.y,height(desired.x,desired.z)+1.35);
   desired.lerp(pivot,vault);
   direction.subVectors(desired,pivot);
@@ -601,7 +626,7 @@ function followRider(dt,z,ground){
   camera.position.copy(pivot).addScaledVector(direction,boomLength);
   const close=1-T.MathUtils.smoothstep(boomLength,.45,2.2);
   root.visible=boomLength>.82;
-  camera.lookAt(lateral-sn*3.5,ground+jump*.65+1.65+1.63*close,z-cs*3.5);
+  camera.lookAt(lateral-sn*3.5,ground+jump*.65+1.65+1.63*close+3.5*Math.tan(lookPitch),z-cs*3.5);
 }
 function frame(now){animateCamp(now*.001);medina.animate(now*.001);const dt=Math.min(.04,(now-last)/1000);last=now;if(state==='free'){
  const held=(...names)=>Number(names.some(k=>keys.has(k)));
@@ -636,7 +661,7 @@ if(parked){
   tail.rotation.z=.06*Math.sin(now*.002);neck.rotation.x=.012*Math.sin(now*.0015);
   for(const leg of legs){leg.hip.rotation.x=0;leg.knee.rotation.x=0}
   camera.position.set(lateral,ground+jump+1.68+.025*motion*Math.sin(phase*2),z);
-  camera.lookAt(lateral-sn*4,camera.position.y-.24,z-cs*4);
+  camera.lookAt(lateral-sn*4,camera.position.y-.24+4*Math.tan(lookPitch),z-cs*4);
 }else{rider.visible=true;followRider(dt,z,ground)}
 if(state==='free'){
   boostButton.textContent=parked?'Sprint':'Gallop';
