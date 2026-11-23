@@ -23,7 +23,11 @@ if(pixelMode){
 const ambient=new T.HemisphereLight(0xffe0d6,0x755a78,1.65);scene.add(ambient);
 sky.material.uniforms.night={value:0};
 sky.material.fragmentShader='uniform float night;'+sky.material.fragmentShader.replace('vec3(.87,.55,.42)','mix(vec3(.87,.55,.42),vec3(.10,.13,.24),night)').replace('vec3(.09,.10,.24)','mix(vec3(.09,.10,.24),vec3(.012,.022,.065),night)');
-const gust=(x,z,t)=>.5+.5*Math.sin(t*1.7-x*.18-z*.07);
+const windFront=t=>-25+(t*3.6)%68;
+function gust(x,z,t){
+ const dx=x-windFront(t),dz=z-(-37+x*.17);
+ return Math.exp(-dx*dx/42-dz*dz/155);
+}
 const sun=new T.DirectionalLight(0xffcc91,3);sun.castShadow=true;sun.shadow.mapSize.set(1024,1024);Object.assign(sun.shadow.camera,{left:-14,right:14,top:14,bottom:-14,far:90});sun.shadow.camera.updateProjectionMatrix();sun.shadow.normalBias=.035;scene.add(sun,sun.target);
 function group(parent,x=0,y=0,z=0){const g=new T.Group();g.position.set(x,y,z);parent.add(g);return g}
 function mesh(parent,geo,color,x,y,z){const m=new T.Mesh(geo,new T.MeshStandardMaterial({color,roughness:.85}));if(pixelMode){
@@ -151,8 +155,11 @@ function createCaravanCamp() {
     oval(camel,fur,0,1.5,0,.45,.52,.99);
     oval(camel,fur,0,1.94,.05,.31,.41,.47);
     for(const side of [-.28,.28]) for(const end of [-.61,.61]){
-      const leg=mesh(camel,timber,fur,side,.87,end); leg.scale.set(1.4,1.74,1.4);
-      oval(camel,0x856044,side,.07,end-.05,.12,.08,.17);
+      const hip=group(camel,side,1.57,end);hip.name='camelLeg';
+      const thigh=mesh(hip,timber,fur,0,-.38,0);thigh.scale.set(1.45,.76,1.45);
+      const knee=group(hip,0,-.76,0);knee.name='knee';
+      const shin=mesh(knee,timber,fur,0,-.38,0);shin.scale.set(1.15,.76,1.15);
+      oval(knee,0x856044,0,-.74,-.05,.12,.08,.17);
     }
     const neckBase=group(camel,0,1.56,-.63);
     cord(neckBase,fur,.17,[[0,0,0],[0,.14,-.4],[0,.68,-.58],[0,1.03,-.6]]);
@@ -170,7 +177,7 @@ function createCaravanCamp() {
     const camel=template.clone();scene.add(camel);
     const cargo=group(camel,0,1.65,0);
     for(const side of [-1,1])mesh(cargo,new T.BoxGeometry(.36,.65,.7),i%2?0x8e5146:0x47706f,side*.46,0,0);
-    caravan.push({camel,cargo,legs:camel.children.filter(p=>p.geometry===timber)});
+    caravan.push({camel,cargo,legs:camel.children.filter(p=>p.name==='camelLeg')});
   }
   function traveller(color){
     const p=group(scene);mesh(p,new T.ConeGeometry(.37,1.34,8),color,0,.79,0);
@@ -188,6 +195,9 @@ function createCaravanCamp() {
   const cup=mesh(scene,new T.CylinderGeometry(.11,.085,.18,8),0xe7bb76,4.35,height(4.35,-38.4)+.86,-38.4);
   mesh(scene,new T.BoxGeometry(.65,.77,.6),0x835942,cup.position.x,cup.position.y-.47,cup.position.z);
   cord(scene,0x8c6f51,.025,[[11.5,height(11.5,-28.5)+1.45,-28.5],[10.8,height(10.8,-28.9)+.9,-28.9],[10.2,height(10.2,-29.4),-29.4]]);
+  const tea=mesh(scene,new T.CylinderGeometry(.016,.012,1,5),0xb96d22,0,0,0);
+  const lip=new T.Vector3(),endPour=new T.Vector3(),vertical=new T.Vector3(0,1,0);
+  const spout=pot.children[0];
   const point=new T.Vector3(),tangent=new T.Vector3();
   return function animateCamp(t) {
     for(const {points,rest,cz} of roofs){
@@ -195,7 +205,15 @@ function createCaravanCamp() {
         points.setY(i,rest[k+1]+.13*Math.cos((z-cz)*Math.PI/5)*gust(rest[k],z,t)*Math.sin(t*4+z));}
       points.needsUpdate=true;
     }
-    host.arm.rotation.x=-.9-.5*Math.sin(t*.95);pot.rotation.z=.65*Math.sin(t*.95);
+    const beat=t%8,pour=T.MathUtils.smoothstep(beat,1,2)*(1-T.MathUtils.smoothstep(beat,4.6,5.6));
+    host.arm.rotation.x=-.75-.65*pour;pot.rotation.x=-.72*pour;
+    tea.visible=pour>.75;
+    if(tea.visible){
+      lip.set(0,.095,0);spout.localToWorld(lip);
+      endPour.copy(cup.position);endPour.y+=.085;
+      tea.position.copy(lip).lerp(endPour,.5);
+      const length=lip.sub(endPour).length();tea.scale.y=length;tea.quaternion.setFromUnitVectors(vertical,lip.normalize());
+    }
     helper.arm.rotation.x=-.75-.48*Math.sin(t*1.9);
     const cycle=(t+9)%152, outbound=cycle<84;
     const progress=outbound?Math.min(1,cycle/62):Math.max(0,1-(cycle-84)/62);
@@ -205,11 +223,20 @@ function createCaravanCamp() {
       const u=.94-progress*.87+i*.017;
       ridgeRoute.getPointAt(u,point);ridgeRoute.getTangentAt(u,tangent);
       const x=point.x,z=point.z;
-      const kneel=cycle>=62&&cycle<84?Math.min(1,(cycle-62)/2,(84-cycle)/2):0;
+      const pause=cycle-62-i*.65;
+      const fold=delay=>T.MathUtils.smoothstep(pause-delay,0,1.8)*(1-T.MathUtils.smoothstep(cycle+i*.4,80+delay,82+delay));
+      const front=fold(0)*1.07,rear=fold(.8)*1.02;
+      const kneel=Math.max(front,rear);
       camel.position.set(x,height(x,z)+(resting?0:.05*Math.sin(t*4+i)),z);
-      camel.scale.y=1-.44*kneel;
+      const frontDrop=1.52*(1-Math.cos(front)),rearDrop=1.52*(1-Math.cos(rear));
+      camel.position.y-=(frontDrop+rearDrop)*.5;
+      camel.rotation.order='YXZ';camel.rotation.x=Math.atan2(rearDrop-frontDrop,1.22);
       camel.rotation.y=Math.atan2(tangent.x,tangent.z)+(outbound?0:Math.PI);
-      legs.forEach((leg,j)=>leg.rotation.x=resting?0:.22*Math.sin(t*4+i+j*2));
+      legs.forEach((leg,j)=>{
+        const bend=leg.position.z<0?front:-rear;
+        leg.rotation.x=bend+(resting?0:.22*Math.sin(t*4+i+j*2));
+        leg.getObjectByName('knee').rotation.x=-2*bend;
+      });
       cargo.position.y=1.65-(i===0?kneel*.85:0);
       if(i===0){placeVisitor(guide,x+1.25,z);guide.p.rotation.y=camel.rotation.y;guide.arm.rotation.x=kneel?-.9+.4*Math.sin(t*1.8):.26*Math.sin(t*4)}
     }
@@ -700,11 +727,22 @@ function footprint(x,z,yaw,w,h){
   normal.set((height(x-.1,z)-height(x+.1,z))*5,1,(height(x,z-.1)-height(x,z+.1))*5).normalize();
   stamp.position.set(x,height(x,z)+.047,z);
   stamp.quaternion.setFromUnitVectors(up,normal);stamp.rotateZ(yaw);stamp.scale.set(w,h,1);stamp.updateMatrix();
-  marks.setMatrixAt(markIndex,stamp.matrix);markIndex=(markIndex+1)%384;marks.count=Math.min(384,marks.count+1);marks.instanceMatrix.needsUpdate=true;
+  wear[markIndex]=1;printX[markIndex]=x;printZ[markIndex]=z;ink.setX(markIndex,1);marks.setMatrixAt(markIndex,stamp.matrix);markIndex=(markIndex+1)%384;marks.count=Math.min(384,marks.count+1);marks.instanceMatrix.needsUpdate=true;
 }
-const dustGeo=new T.BufferGeometry(),dustXYZ=new Float32Array(270);
-dustGeo.setAttribute('position',new T.BufferAttribute(dustXYZ,3));
-const dust=new T.Points(dustGeo,new T.PointsMaterial({color:0xf5c48a,size:.13,transparent:true,opacity:.55,depthWrite:false}));dust.frustumCulled=false;scene.add(dust);
+const wisps=[];
+for(let k=0;k<13;k++){
+  const geometry=new T.PlaneGeometry(1,1,10,1);
+  const material=new T.MeshBasicMaterial({color:0xe5be93,transparent:true,opacity:0,depthWrite:false,side:T.DoubleSide});
+  const wisp=new T.Mesh(geometry,material);wisp.frustumCulled=false;scene.add(wisp);wisps.push(wisp);
+}
+const wear=new Float32Array(384),printX=new Float32Array(384),printZ=new Float32Array(384);
+const ink=new T.InstancedBufferAttribute(new Float32Array(384),1);
+marks.geometry.setAttribute('strength',ink);
+marks.material.transparent=true;marks.material.depthWrite=false;
+marks.material.onBeforeCompile=s=>{
+  s.vertexShader='attribute float strength; varying float coverage;\n'+s.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\ncoverage=strength;');
+  s.fragmentShader='varying float coverage;\n'+s.fragmentShader.replace('#include <alphamap_fragment>','#include <alphamap_fragment>\ndiffuseColor.a*=coverage;');
+};
 const starsXYZ=[];
 for(let i=0;i<320;i++){
   const a=i*2.39996,y=.09+.9*((i*.61803)%1),r=Math.sqrt(1-y*y);
@@ -726,21 +764,31 @@ function animateDesert(dt,z){
   scene.fog.color.lerpColors(duskFog,nightFog,night);
   desertStars.position.copy(camera.position);desertStars.material.opacity=night;
   veil.rotation.z=.025*gust(lateral,z,t)*Math.sin(t*4);
-  const sand=Math.abs(lateral)>38||z>-81||z<-182;
-  dust.visible=sand;
-  if(sand)for(let i=0;i<90;i++){
-    const lane=Math.floor(i/9),x=lateral+((lane*9.13+t*3+i%9*.34)%35)-17.5;
-    const pz=z-5+(lane*7.37%28)-14+Math.sin(i*3)*.65;
-    dustXYZ[i*3]=x;dustXYZ[i*3+1]=height(x,pz)+.12+gust(x,pz,t)*(.15+i%4*.12);dustXYZ[i*3+2]=pz;
+  const front=windFront(t);
+  wisps.forEach((sheet,k)=>{
+    const attr=sheet.geometry.attributes.position;
+    for(let i=0;i<attr.count;i++){
+      const f=(i%11)/10,x=front-4+f*6+Math.sin(k*2)*3;
+      const pz=-37+x*.17+(k-6)*1.12+Math.sin(f*3+t*.9+k)*.75;
+      const h=.06+(i<11?.48:0)*Math.sin(f*Math.PI)*(.6+.4*Math.sin(k+t));
+      attr.setXYZ(i,x,height(x,pz)+h,pz);
+    }
+    attr.needsUpdate=true;
+    sheet.material.opacity=.20*T.MathUtils.smoothstep(front,-25,-16)*(1-T.MathUtils.smoothstep(front,32,43));
+  });
+  for(let i=0;i<marks.count;i++){
+    wear[i]=Math.max(0,wear[i]-dt*(.019+.26*gust(printX[i],printZ[i],t)));
+    ink.setX(i,wear[i]*.85);
   }
-  dustGeo.attributes.position.needsUpdate=true;
+  ink.needsUpdate=true;
   if(state!=='free'||jump>.08){lastPrint=null;printStep=0;return}
   if(lastPrint&&lastPrint.mounted===!parked){
     const distance=Math.hypot(lateral-lastPrint.x,z-lastPrint.z);
     if(distance<1.5)printStep+=distance;
-    if(printStep>(parked?.68:1.45+Math.abs(horseSpeed)*.095)){
-      printStep=0;walkSide*=-1;
-      for(const side of parked?[walkSide]:[-1,1])for(const fore of parked?[0]:[-.58,.58]){
+    const spacing=parked?.68:(1.45+Math.abs(horseSpeed)*.095)/4;
+    if(printStep>=spacing){
+      printStep-=spacing;walkSide*=-1;
+      {const side=walkSide,fore=parked?0:(markIndex%4<2?-.58:.58);
         const dx=side*(parked?.115:.31),dz=fore+side*.09;
         footprint(lateral+Math.cos(heading)*dx+Math.sin(heading)*dz,z-Math.sin(heading)*dx+Math.cos(heading)*dz,heading,parked?.095:.12,parked?.19:.14);
       }
