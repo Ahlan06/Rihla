@@ -517,6 +517,7 @@ function changeMount(){
   if(state!=='free'||jump>0||vy!==0)return;
   if(parked){
     if(!nearHorse())return;
+    if(document.pointerLockElement===canvas)document.exitPointerLock();
     lateral=parked.x;worldZ=parked.z;heading=parked.heading;parked=null;
     document.querySelector('footer').textContent=ridingHelp;
   }else{
@@ -528,13 +529,13 @@ function changeMount(){
     if(!spot){document.querySelector('footer').textContent='Find more room beside your horse to dismount.';return}
     parked={x:lateral,z:worldZ,heading};lateral=spot.x;worldZ=spot.z;
     heading=Math.atan2(lateral-parked.x,worldZ-parked.z);
-    document.querySelector('footer').textContent='Swipe to look · Shift or Sprint to run · Return to your horse to mount';
+    document.querySelector('footer').textContent='Move: WASD / ZQSD / stick · Look: click for mouse or swipe · Shift to sprint';
   }
   clearInput();lastCameraState='';
 }
 mountButton.onclick=changeMount;
 addEventListener('keydown',e=>{if(state==='free'&&e.code==='KeyE'&&!e.repeat){e.preventDefault();changeMount()}});
-function returnMenu(){parked=null;rider.visible=true;state='ready';freeUI.hidden=true;menu.hidden=false;clearInput();dist=lateral=worldZ=heading=jump=vy=0;msg.textContent='Choose your ride.';document.querySelector('footer').textContent='← → or swipe to dodge · Space or tap to jump'}
+function returnMenu(){if(document.pointerLockElement===canvas)document.exitPointerLock();parked=null;rider.visible=true;state='ready';freeUI.hidden=true;menu.hidden=false;clearInput();dist=lateral=worldZ=heading=jump=vy=0;msg.textContent='Choose your ride.';document.querySelector('footer').textContent='← → or swipe to dodge · Space or tap to jump'}
 document.querySelector('#exit').onclick=returnMenu;
 const explore=document.querySelector('#explore');explore.disabled=false;
 explore.onclick=()=>{returnMenu();state='free';freeUI.hidden=false;menu.hidden=true;document.querySelector('footer').textContent='Swipe to look · Shift or Gallop to accelerate · Alt to walk'};
@@ -563,14 +564,20 @@ function move(dir){if(state==='run')lane=Math.max(-1,Math.min(1,lane+dir))}
 go.disabled=false;go.textContent='Start ride';go.onclick=start;
 addEventListener('keydown',e=>{if(state!=='run'||!['ArrowLeft','ArrowRight','ArrowUp','Space'].includes(e.code))return;e.preventDefault();if(e.repeat)return;if(e.code==='ArrowLeft')move(-1);else if(e.code==='ArrowRight')move(1);else leap()});
 let screenGesture=null, orbitYaw=0, lookPitch=0;
+document.addEventListener('mousemove',e=>{
+  if(document.pointerLockElement!==canvas||!parked||state!=='free')return;
+  heading-=e.movementX*.0025;
+  lookPitch=T.MathUtils.clamp(lookPitch-e.movementY*.0025,-.65,.65);
+});
 canvas.onpointerdown=e=>{
   if(screenGesture || !['run','free'].includes(state) || e.button!==0)return;
   screenGesture={id:e.pointerId,x:e.clientX,y:e.clientY,mode:state};
   canvas.setPointerCapture(e.pointerId);
+  if(parked&&state==='free'&&e.pointerType==='mouse')canvas.requestPointerLock?.()?.catch?.(()=>{});
 };
 canvas.onpointermove=e=>{
   const g=screenGesture;
-  if(!g||g.id!==e.pointerId||g.mode!=='free'||state!=='free')return;
+  if(document.pointerLockElement===canvas||!g||g.id!==e.pointerId||g.mode!=='free'||state!=='free')return;
   const sensitivity=2.9/Math.max(280,Math.min(canvas.clientWidth,canvas.clientHeight));
   const yaw=(e.clientX-g.x)*sensitivity;
   if(parked)heading-=yaw;else orbitYaw-=yaw;
@@ -632,19 +639,38 @@ function frame(now){animateCamp(now*.001);medina.animate(now*.001);const dt=Math
  const held=(...names)=>Number(names.some(k=>keys.has(k)));
  const turn=held('arrowleft','q','a')-held('arrowright','d')-stickX-scrollX;
  const throttle=held('arrowup','z','w')-held('arrowdown','s')+stickY+scrollY;
+ if(parked){
+   const magnitude=Math.hypot(turn,throttle);
+   const speed=(keys.has('shift')||touchBoost)?8:3.4;
+   const step=magnitude>.07?speed*dt/Math.max(1,magnitude):0;
+   const sn=Math.sin(heading),cs=Math.cos(heading);
+   const x=T.MathUtils.clamp(lateral-(sn*throttle+cs*turn)*step,-145,145);
+   const z=T.MathUtils.clamp(worldZ+(-cs*throttle+sn*turn)*step,-270,80);
+   const passable=(px,pz)=>!medina.blocked(px,pz)&&Math.hypot(px-parked.x,pz-parked.z)>.85;
+   const oldX=lateral,oldZ=worldZ;
+   if(passable(x,worldZ))lateral=x;
+   if(passable(lateral,z))worldZ=z;
+   const walked=Math.hypot(lateral-oldX,worldZ-oldZ);
+   dist+=walked;stridePhase+=walked*2.2;horseSpeed=dt>0?walked/dt:0;
+ }else{
  const power=Math.min(1,Math.abs(throttle));
  const keyboard=held('arrowup','z','w','arrowdown','s');
  const boosting=keys.has('shift')||touchBoost;
  const gait=boosting?21:keyboard?(keys.has('alt')?3:7):(power<.4?3:power<.76?7:14);
- const target=parked?(power<.07?0:Math.sign(throttle)*power*(boosting&&throttle>0?8:3.4)):(power<.07?0:throttle<0?-2.5:gait);
+ const forward=throttle>=0?1:-1;
+ const dx=Math.sin(heading)*forward,dz=Math.cos(heading)*forward;
+ const slope=T.MathUtils.clamp((height(lateral-dx,worldZ-dz)-height(lateral+dx,worldZ+dz))*.5,-.5,.5);
+ const terrainFactor=1-slope*.65;
+ const target=power<.07?0:(throttle<0?-2.5:gait)*terrainFactor;
  const braking=horseSpeed*target<0||Math.abs(target)<Math.abs(horseSpeed);
- const delta=(braking?15:boosting?9:5.5)*dt;
+ const delta=(braking?15:boosting?9:5.5)*(1+(braking?slope:-slope)*.75)*dt;
  horseSpeed+=T.MathUtils.clamp(target-horseSpeed,-delta,delta);
  heading+=T.MathUtils.clamp(turn,-1,1)*dt*T.MathUtils.lerp(2.45,1.05,Math.min(1,Math.abs(horseSpeed)/14));
  const step=horseSpeed*dt;
  const x=Math.max(-145,Math.min(145,lateral-Math.sin(heading)*step));
  const nextZ=Math.max(-270,Math.min(80,worldZ-Math.cos(heading)*step));
  if(!medina.blocked(x,nextZ)&&(!parked||Math.hypot(x-parked.x,nextZ-parked.z)>.85)){dist+=Math.hypot(x-lateral,nextZ-worldZ);lateral=x;worldZ=nextZ;stridePhase+=step*(Math.abs(horseSpeed)>9?1.38:2.2);}else horseSpeed=0;
+ }
  scrollX*=Math.exp(-5*dt);scrollY*=Math.exp(-5*dt);jump=Math.max(0,jump+vy*dt);vy=jump>0?vy-13*dt:0;paintMap();
 }
 if(state==='run'){dist+=8*dt;lateral+=(lane*1.75-lateral)*(1-Math.exp(-12*dt));jump=Math.max(0,jump+vy*dt);vy=jump>0?vy-13*dt:0;if(Math.abs(dist-80)<.65&&Math.abs(lateral)<.75)end('The djinn blocked your path. Dodge to either side.');else if(dist>=160)end('You made it across the dunes!')}
