@@ -383,13 +383,12 @@ function buildMedina() {
       add(cube,x,y+.45,z+sign*(d/2-.13),w,.85,.26,0xddba97);
     }
   }
-  for(const side of [-1,1])for(let i=0;i<5;i++){
-    if(side===1&&(i===0||i===4))continue;
-    const z=-110-i*8.25,x=side<0?-41:-30.5;
-    const w=side<0?6.8:3.6,d=8.12,face=x-side*w/2;
+  function casbahHouse(side,i,x,z,w,d=8.12){
+    const face=x-side*w/2;
     const base=height(x,z),top=base+4.9+(i*3+(side+1))%4;
     const color=lime[(i+(side+1))%lime.length];
-    add(cube,x,(top-1)/2,z,w,top+1,d,color);bounds.push([x,z,w/2+.32,d/2+.28]);
+    const footing=Math.min(-1,...[-1,1].flatMap(s=>[-1,1].map(t=>height(x+s*w/2,z+t*d/2)-.5)));
+    add(cube,x,(top+footing)/2,z,w,top-footing,d,color);bounds.push([x,z,w/2+.32,d/2+.28]);
     terrace(x,top,z,w,d);
     const upperX=x-side*.34, upperZ=z+.65, upperH=2.6+i%2;
     add(cube,upperX,top+upperH/2,upperZ,w*.88,upperH,d*.66,color);
@@ -410,6 +409,30 @@ function buildMedina() {
       light.material.emissive.setHex(0xfa923e);
     }
   }
+  for(const side of [-1,1])for(let i=0;i<5;i++){
+    if(side===1&&(i===0||i===4))continue;
+    casbahHouse(side,i,side<0?-41:-30.5,-110-i*8.25,side<0?6.8:3.6);
+  }
+  // The outer residential loop wraps around both ends of the existing row.
+  for(const z of [-102,-151])hillsidePaving(-45,z,25,5);
+  hillsidePaving(-35,-104.75,5,5.5);
+  hillsidePaving(-35,-147,5,8);
+  hillsidePaving(-56,-126.5,5,44);
+  hillsidePaving(-63,-126,9,13);
+  for(let row=0;row<6;row++){
+    const z=-106.6-row*7.7;
+    casbahHouse(1,row+2,-49,z,6,7.4);
+    // The middle houses sit back to open the courtyard to the lane.
+    const courtyard=row===2||row===3;
+    casbahHouse(-1,row+4,courtyard?-71:-63,z,courtyard?6.5:7,7.4);
+  }
+  const wellX=-64,wellZ=-126,wellY=height(wellX,wellZ);
+  add(column,wellX,wellY+.39,wellZ,1.85,.78,1.85,0xe1bc8e);
+  add(column,wellX,wellY+.80,wellZ,1.47,.08,1.47,0x554c46);
+  for(const dx of [-.98,.98])add(cube,wellX+dx,wellY+1.38,wellZ,.16,2.76,.18,0x77583d);
+  add(cube,wellX,wellY+2.72,wellZ,2.24,.22,.24,0x674d39);
+  add(column,wellX+.12,wellY+1.75,wellZ,.04,1.85,.04,0x937552);
+  bounds.push([wellX,wellZ,1.22,1.12]);
   const townsfolk=[];
   function person(x,z,shade,merchant) {
     const p=group(scene,x,.08,z), torso=group(p,0,.43,0);
