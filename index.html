@@ -7,12 +7,12 @@
 <title>Rihla · رحلة</title>
 <style>
 *{box-sizing:border-box}body{margin:0;color:#fff0ce;background:#101222;font-family:system-ui,sans-serif}main{position:relative;height:100svh;min-height:420px;overflow:hidden}canvas{width:100%;height:100%;display:block;image-rendering:pixelated;touch-action:none}.hud{position:absolute;inset:0 0 auto;display:flex;justify-content:space-between;padding:clamp(16px,4vw,48px);font:700 14px ui-monospace,monospace;letter-spacing:.1em;text-shadow:0 2px #101222;pointer-events:none}.hud strong{display:block;font-size:24px}.menu{position:absolute;top:35%;left:50%;width:min(90%,460px);transform:translate(-50%,-50%);text-align:center;text-shadow:0 3px 10px #101222}.menu[hidden]{display:none}h1{font:900 clamp(52px,12vw,104px)/.95 Georgia,serif;margin:0;letter-spacing:-.05em}.arabic{display:block;color:#ffc997;font:700 25px Georgia,serif;margin-bottom:8px}p{margin:14px 0 20px}button{border:2px solid #fff0ce;background:#ffc997;color:#231726;padding:12px 24px;font:700 16px ui-monospace,monospace;cursor:pointer;box-shadow:4px 4px #432d40}button:focus-visible{outline:3px solid white;outline-offset:5px}.hint{position:absolute;bottom:18px;left:50%;transform:translateX(-50%);white-space:nowrap;background:#221a2cdd;padding:8px 12px;font:14px ui-monospace,monospace;pointer-events:none}
-</style>
+.pixel-mode{display:block;width:max-content;margin:14px auto 0;color:#fff0ce;font:700 16px ui-monospace,monospace;text-underline-offset:4px}</style>
 </head>
 <body><main>
 <canvas aria-label="A rider seen from behind on a desert trail at dusk"></canvas>
 <div class="hud"><div>DISTANCE<strong id="score">0 m</strong></div><div>BEST<strong id="best">0 m</strong></div></div>
-<section class="menu" id="menu"><span class="arabic" lang="ar">رحلة</span><h1>Rihla</h1><p id="message">Ride the dunes at dusk.</p><button id="play">Start ride</button></section>
+<section class="menu" id="menu"><span class="arabic" lang="ar">رحلة</span><h1>Rihla</h1><p id="message">Ride the dunes at dusk.</p><button id="play">Start ride</button><a class="pixel-mode" href="/demo-3d/?style=pixel">Play in pixel 3D</a></section>
 <div class="hint">Jump: ↑ / tap · Dodge: ← → / swipe</div>
 </main>
 <script>
