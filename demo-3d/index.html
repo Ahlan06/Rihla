@@ -68,6 +68,97 @@ function cord(parent,color,radius,points){
   const curve=new T.CatmullRomCurve3(points.map(p=>new T.Vector3(...p)));
   return mesh(parent,new T.TubeGeometry(curve,18,radius,6,false),color,0,0,0);
 }
+
+function createCaravanCamp() {
+  // Each shelter follows the dune at its own four corners.
+  const canvasPaint = document.createElement('canvas');
+  canvasPaint.width = 32; canvasPaint.height = 32;
+  const ink = canvasPaint.getContext('2d');
+  ink.fillStyle = '#58332e'; ink.fillRect(0,0,32,32);
+  for (const y of [3,19]) {
+    ink.fillStyle = '#b75e43'; ink.fillRect(0,y,32,6);
+    ink.fillStyle = '#edc58d'; ink.fillRect(0,y+2,32,1);
+    for (let x=0;x<32;x+=4) ink.fillRect(x,y+3,2,1);
+  }
+  const weave = new T.CanvasTexture(canvasPaint);
+  weave.colorSpace = T.SRGBColorSpace; weave.magFilter = T.NearestFilter;
+  const timber = new T.CylinderGeometry(.07,.09,1,6);
+  function pole(x,z,h) {
+    const post = mesh(scene,timber,0x664631,x,height(x,z)+h/2,z);
+    post.scale.y = h;
+  }
+  for (const [cx,cz] of [[9,-31],[15,-39],[8,-45]]) {
+    const roof = new T.PlaneGeometry(5,5,8,8);
+    roof.rotateX(-Math.PI/2);
+    const points = roof.attributes.position;
+    for (let i=0;i<points.count;i++) {
+      const x=points.getX(i), z=points.getZ(i);
+      const rise=1-Math.abs(x)/2.5;
+      points.setXYZ(i,cx+x,height(cx+x,cz+z)+1.45+1.45*rise*rise-.18*Math.cos(z*Math.PI/5),cz+z);
+    }
+    roof.computeVertexNormals();
+    const cover=mesh(scene,roof,0xffffff,0,0,0);
+    cover.material.map=weave; cover.material.side=T.DoubleSide;
+    for(const dz of [-2.5,2.5]) for(const dx of [-2.5,0,2.5]) pole(cx+dx,cz+dz,dx===0?2.9:1.45);
+  }
+  const fire=group(scene,5.5,height(5.5,-37),-37);
+  for(let i=0;i<8;i++){
+    const angle=i*Math.PI/4;
+    oval(fire,0x64524b,.76*Math.cos(angle),.09,.76*Math.sin(angle),.23,.15,.19);
+  }
+  const flames=[];
+  for(let i=0;i<5;i++){
+    const a=i*2.4, pivot=group(fire,.29*Math.sin(a),0,.29*Math.cos(a));
+    const flame=mesh(pivot,new T.ConeGeometry(.31,1.24,5),0xff9635,0,.63,0);
+    flame.material.emissive.setHex(i%2?0xff6318:0xffbb45);
+    flame.castShadow=false; flames.push(pivot);
+  }
+  const glow=new T.PointLight(0xff8738,12,10);
+  glow.position.y=.9; fire.add(glow);
+  const sparks=new T.BufferGeometry(), dots=new Float32Array(36);
+  sparks.setAttribute('position',new T.BufferAttribute(dots,3));
+  const embers=new T.Points(sparks,new T.PointsMaterial({color:0xffc86a,size:.09}));
+  embers.frustumCulled=false; fire.add(embers);
+  const animals=[];
+  for(const [x,z,angle] of [[8,-53,.75],[11,-51,-.5]]){
+    const camel=group(scene,x,height(x,z),z); camel.rotation.y=angle;
+    const fur=0xb98151;
+    oval(camel,fur,0,1.5,0,.45,.52,.99);
+    oval(camel,fur,0,1.94,.05,.31,.41,.47);
+    for(const side of [-.28,.28]) for(const end of [-.61,.61]){
+      const leg=mesh(camel,timber,fur,side,.87,end); leg.scale.set(1.4,1.74,1.4);
+      oval(camel,0x856044,side,.07,end-.05,.12,.08,.17);
+    }
+    const neckBase=group(camel,0,1.56,-.63);
+    cord(neckBase,fur,.17,[[0,0,0],[0,.14,-.4],[0,.68,-.58],[0,1.03,-.6]]);
+    oval(neckBase,fur,0,1.05,-.73,.16,.17,.34);
+    for(const side of [-.12,.12]){
+      oval(neckBase,fur,side,1.24,-.56,.055,.09,.05);
+      oval(neckBase,0x342927,side*1.22,1.09,-.76,.025,.03,.035);
+    }
+    animals.push(neckBase);
+  }
+  return function animateCamp(t) {
+    flames.forEach((p,i)=>{
+      p.scale.y=.87+.18*Math.sin(t*8+i)+.14*Math.sin(t*13+i*2);
+      p.rotation.z=.13*Math.sin(t*5+i);
+    });
+    glow.intensity=12+2*Math.sin(t*8);
+    for(let i=0;i<dots.length/3;i++){
+      const h=(t*.47+i*.618)%1;
+      dots[i*3]=h*.68+.22*Math.sin(i+t*2);
+      dots[i*3+1]=.65+h*2.1;
+      dots[i*3+2]=.25*Math.cos(i+t+h);
+    }
+    sparks.attributes.position.needsUpdate=true;
+    animals.forEach((n,i)=>{
+      n.rotation.x=.07+.24*Math.sin(t*.6+i*2.5);
+      n.rotation.y=.22*Math.sin(t*.83+i);
+    });
+  };
+}
+const animateCamp=createCaravanCamp();
+
 const root=group(scene),body=group(root),coat=0x30292b,mane=0x19171b;
 sculpt(body,coat,[[-1.04,.04,.12,1.52],[-.86,.33,.45,1.57],[-.57,.46,.53,1.58],[-.21,.48,.53,1.53],[.2,.43,.45,1.55],[.54,.51,.51,1.60],[.77,.52,.48,1.59],[.99,.38,.39,1.56],[1.09,.15,.23,1.55],[1.12,.01,.05,1.51]],true);
 const neck=group(body);
@@ -154,7 +245,7 @@ function move(dir){if(state==='run')lane=Math.max(-1,Math.min(1,lane+dir))}
 go.disabled=false;go.textContent='Start ride';go.onclick=start;
 addEventListener('keydown',e=>{if(state!=='run'||!['ArrowLeft','ArrowRight','ArrowUp','Space'].includes(e.code))return;e.preventDefault();if(e.repeat)return;if(e.code==='ArrowLeft')move(-1);else if(e.code==='ArrowRight')move(1);else leap()});
 let touch=null;canvas.onpointerdown=e=>{touch=e.clientX;canvas.setPointerCapture(e.pointerId)};canvas.onpointerup=e=>{if(touch===null)return;const dx=e.clientX-touch;touch=null;if(Math.abs(dx)>22)move(Math.sign(dx));else leap()};canvas.onpointercancel=()=>touch=null;
-function frame(now){const dt=Math.min(.04,(now-last)/1000);last=now;if(state==='free'){
+function frame(now){animateCamp(now*.001);const dt=Math.min(.04,(now-last)/1000);last=now;if(state==='free'){
  const held=(...names)=>Number(names.some(k=>keys.has(k)));
  const turn=held('arrowleft','q','a')-held('arrowright','d')-stickX-scrollX;
  const throttle=held('arrowup','z','w')-held('arrowdown','s')+stickY+scrollY;
