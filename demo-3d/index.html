@@ -40,7 +40,11 @@ m.position.set(x,y,z);m.castShadow=m.receiveShadow=true;parent.add(m);return m}
 const sphere=new T.SphereGeometry(1,18,14);
 function oval(p,c,x,y,z,a,b,d){const m=mesh(p,sphere,c,x,y,z);m.scale.set(a,b,d);return m}
 const ridgeRoute=new T.CatmullRomCurve3([[22,-148],[33,-148],[41,-144],[47,-133],[49,-114],[48,-94],[44,-76],[37,-61],[26,-50],[20,-39],[12,-33]].map(([x,z])=>new T.Vector3(x,0,z)));
-function height(x,z){const ridge=3.8*Math.exp(-((x-48)**2)/86-((z+105)**2)/880);const edge=Math.max(Math.abs(x)-38,-z-182,z+84,0);const blend=Math.min(1,edge/12);const rise=3.2*T.MathUtils.smoothstep(-x,23,35)*(1-T.MathUtils.smoothstep(-x,48,57))*T.MathUtils.smoothstep(-z,108,135)*(1-T.MathUtils.smoothstep(-z,155,169));return rise+ridge+blend*blend*(3-2*blend)*( 2.6*Math.sin(z*.065+.48*Math.sin(x*.09))+1.1*Math.sin(z*.13+x*.07)+2.2*Math.sin(x*.13+z*.025))}
+const discoveryRoute=new T.CatmullRomCurve3([[13,-33],[29,-26],[47,-24],[60,-37],[75,-51],[86,-63],[99,-72],[109,-89],[97,-104],[74,-110],[49,-114]].map(([x,z])=>new T.Vector3(x,0,z)));
+const peaks=[[107,-121,16,14],[129,-106,23,19],[134,-82,15,13],[92,-133,12,12]];
+function height(x,z){const ridge=3.8*Math.exp(-((x-48)**2)/86-((z+105)**2)/880);const edge=Math.max(Math.abs(x)-38,-z-182,z+84,0);const blend=Math.min(1,edge/12);const rise=3.2*T.MathUtils.smoothstep(-x,23,35)*(1-T.MathUtils.smoothstep(-x,48,57))*T.MathUtils.smoothstep(-z,108,135)*(1-T.MathUtils.smoothstep(-z,155,169));const basin=Math.hypot((x-51)/7,(z+14)/4.8);
+ const relief=peaks.reduce((sum,[px,pz,h,w])=>sum+h*Math.max(0,1-Math.hypot(x-px,(z-pz)*.83)/w)**1.35,0);
+ const natural=relief+rise+ridge+blend*blend*(3-2*blend)*( 2.6*Math.sin(z*.065+.48*Math.sin(x*.09))+1.1*Math.sin(z*.13+x*.07)+2.2*Math.sin(x*.13+z*.025));return T.MathUtils.lerp(-1.2+Math.min(1.6,basin)*.95,natural,T.MathUtils.smoothstep(basin,1,2.1))}
 const land=new T.PlaneGeometry(300,360,180,240);land.rotateX(-Math.PI/2);land.translate(0,0,-95);
 const pos=land.attributes.position,colors=[];
 for(let i=0;i<pos.count;i++){const x=pos.getX(i),z=pos.getZ(i);pos.setY(i,height(x,z));const c=new T.Color().setRGB(.54,.315,.195).multiplyScalar(.96+.04*Math.sin(x*7+z*2)+.025*Math.cos(z*9));colors.push(c.r,c.g,c.b)}
@@ -59,9 +63,10 @@ dunes.material.onBeforeCompile=shader=>{
 };
 for(const [x,z,r] of [[-34,-75,17],[65,-151,24],[83,-169,14]]){const m=mesh(scene,new T.ConeGeometry(r,r*1.25,4),0xb58665,x,height(x,z)+r*.49,z);m.rotation.y=Math.PI/4}
 // Sample the same ground surface as the horse across the entire trail width.
+for(const route of [ridgeRoute,discoveryRoute]){
 const trackVertices=[],trackIndices=[],trackColors=[];
 for(let row=0;row<=180;row++){
-  const t=row/180,p=ridgeRoute.getPointAt(t),v=ridgeRoute.getTangentAt(t);
+  const t=row/180,p=route.getPointAt(t),v=route.getTangentAt(t);
   for(let col=0;col<=8;col++){
     const offset=(col-4)*.58;
     const x=p.x-v.z*offset,z=p.z+v.x*offset;
@@ -77,6 +82,7 @@ trackGeometry.setAttribute('color',new T.Float32BufferAttribute(trackColors,3));
 trackGeometry.setIndex(trackIndices);trackGeometry.computeVertexNormals();
 const track=new T.Mesh(trackGeometry,new T.MeshStandardMaterial({vertexColors:true,side:T.DoubleSide}));
 track.receiveShadow=true;scene.add(track);
+}
 const lunarDisc=document.createElement('canvas');lunarDisc.width=lunarDisc.height=40;
 const lunarInk=lunarDisc.getContext('2d');
 const basins=[[12,12,4],[24,14,3],[17,24,5],[30,24,3],[9,20,2],[25,30,2]];
@@ -643,6 +649,29 @@ function buildMedina() {
     add(column,x,13.8,-170,1.5,3.4,1.5,0xdebb99);
     add(dome,x,15.5,-170,1,1.6,1,0xb38862);
   }
+  // The eastern trail skirts the water, passes through a hamlet and enters a ruined gateway.
+  const water=new T.Mesh(new T.CircleGeometry(1,40),new T.MeshStandardMaterial({color:0x489d9a,roughness:.32}));
+  water.rotation.x=-Math.PI/2;water.scale.set(7,4.8,1);water.position.set(51,-.26,-14);scene.add(water);
+  for(const [x,z,h] of [[45,-17,6],[55,-10,7],[58,-15,5],[47,-9,5]]){
+    const y=height(x,z);add(column,x,y+h/2,z,.43,h,.43,0x846445);bounds.push([x,z,.46,.46]);
+    for(let i=0;i<9;i++){
+      const a=i*2.4;const leaf=oval(scene,i%2?0x526742:0x617e4e,x+1.18*Math.sin(a),y+h-.26,z+1.18*Math.cos(a),.39,.13,1.65);
+      leaf.rotation.order='YXZ';leaf.rotation.y=a;leaf.rotation.x=.26;
+    }
+  }
+  for(const [x,z,w,d,h] of [[67,-52,5,5,4],[73,-59,5,5,4.8],[80,-62,4,4,3.8],[80,-46,5,4,3.4],[86,-51,5,5,4.7],[89,-58,4,4,3.9]]){
+    const y=height(x,z),base=y-2;
+    add(plaster,x,base+(h+2)/2,z,w,h+2,d,0xe4bb91);
+    bounds.push([x,z,w/2+.38,d/2+.38]);terrace(x,y+h,z,w,d);
+    const entrance=y+.94;add(carved,x,entrance,z+d/2,1.1,1.9,.15,0xe4cbaf);
+    add(jar,x+1.3,height(x+1.3,z+d/2+.4),z+d/2+.4,1,1,1,0xb48161);
+  }
+  for(const [x,z,h] of [[104,-87,4],[113,-87,4],[114,-96,2.6],[102,-98,1.7]]){
+    const y=height(x,z);for(let n=0;n<h/.58;n++)add(cube,x+Math.sin(n)*.07,y+.28+n*.58,z,1.55,.55,1.85, n%2?0xb98a65:0xc69e76);
+    bounds.push([x,z,1.13,1.27]);
+  }
+  const lintelY=Math.max(height(104,-87),height(113,-87))+4.15;
+  add(cube,108.5,lintelY,-87,10.8,.72,1.9,0xbb9471);
   for(const [shape,items] of batches){
     const material=new T.MeshStandardMaterial({map:finishes.get(shape)||null,roughness:.94});
     const batch=new T.InstancedMesh(shape,material,items.length);
@@ -786,6 +815,8 @@ function paintMap(){
  map.beginPath();for(let i=0;i<=32;i++){const p=ridgeRoute.getPointAt(i/32);const mx=(p.x+150)*.4,my=(p.z+275)*.4;if(i===0)map.moveTo(mx,my);else map.lineTo(mx,my)}
  map.strokeStyle='#dcab79';map.lineWidth=1.6;map.stroke();
  if(parked){map.fillStyle='#ffe3a3';map.fillRect((parked.x+150)*.4-2,(parked.z+275)*.4-2,4,4)}
+ map.beginPath();for(let j=0;j<=48;j++){const p=discoveryRoute.getPointAt(j/48),x=(p.x+150)*.4,y=(p.z+275)*.4;if(j)map.lineTo(x,y);else map.moveTo(x,y)}map.stroke();
+ for(const [x,z,color] of [[51,-14,'#69cdbe'],[78,-55,'#ece0b8'],[109,-89,'#be976d'],[129,-106,'#cbb7ad']]){map.fillStyle=color;map.fillRect((x+150)*.4-1.5,(z+275)*.4-1.5,3,3)}
  map.save();map.translate((lateral+150)*.4,(worldZ+275)*.4);map.rotate(-heading);map.fillStyle='#a8f2df';map.beginPath();map.moveTo(0,-6);map.lineTo(-4,4);map.lineTo(4,4);map.fill();map.restore();
 }
 function start(){heading=0;dist=lane=lateral=jump=vy=0;state='run';menu.hidden=true}
@@ -983,7 +1014,12 @@ function frame(now){animateCamp(desertTime);medina.animate(now*.001);const dt=Ma
  const step=horseSpeed*dt;
  const x=Math.max(-145,Math.min(145,lateral-Math.sin(heading)*step));
  const nextZ=Math.max(-270,Math.min(80,worldZ-Math.cos(heading)*step));
- if(!medina.blocked(x,nextZ)&&(!parked||Math.hypot(x-parked.x,nextZ-parked.z)>.85)){dist+=Math.hypot(x-lateral,nextZ-worldZ);lateral=x;worldZ=nextZ;stridePhase+=step*(Math.abs(horseSpeed)>9?1.38:2.2);}else horseSpeed=0;
+ const prevX=lateral,prevZ=worldZ;
+ if(!medina.blocked(x,worldZ))lateral=x;
+ if(!medina.blocked(lateral,nextZ))worldZ=nextZ;
+ const travelled=Math.hypot(lateral-prevX,worldZ-prevZ);
+ dist+=travelled;stridePhase+=Math.sign(step)*travelled*(Math.abs(horseSpeed)>9?1.38:2.2);
+ if(travelled<Math.abs(step)*.05)horseSpeed=0;
  }
  scrollX*=Math.exp(-5*dt);scrollY*=Math.exp(-5*dt);jump=Math.max(0,jump+vy*dt);vy=jump>0?vy-13*dt:0;paintMap();
 }
@@ -991,7 +1027,7 @@ if(state==='run'){dist+=8*dt;lateral+=(lane*1.75-lateral)*(1-Math.exp(-12*dt));j
 const z=state==='free'?worldZ:-dist,ground=height(lateral,z),phase=state==='free'?stridePhase:dist*2.3;root.position.set(lateral,ground+jump,z);const sn=Math.sin(heading),cs=Math.cos(heading);
 root.rotation.order='YXZ';root.rotation.y=heading;root.rotation.x=Math.atan((height(lateral-sn,z-cs)-height(lateral+sn,z+cs))/2);
 const motion=state==='free'?Math.min(1,Math.abs(horseSpeed)/3):1;
-body.position.y=motion*.055*Math.sin(phase*2);rider.rotation.x=.07*Math.sin(phase);tail.rotation.z=.12*Math.sin(phase*.5);neck.rotation.x=.016*Math.sin(phase*2);
+body.position.y=motion*.055*Math.sin(phase*2);rider.rotation.x=motion*.07*Math.sin(phase);tail.rotation.z=.12*Math.sin(phase*.5);neck.rotation.x=.016*Math.sin(phase*2);
 for(const leg of legs){const t=phase+(leg.x>0?.75:0)+(leg.z>0?2.8:0);leg.hip.rotation.x=jump?.35:motion*.46*Math.sin(t);leg.knee.rotation.x=jump?-.9:-motion*.46*Math.max(0,Math.cos(t))}
 if(parked){
   root.position.set(parked.x,height(parked.x,parked.z),parked.z);
