@@ -5,16 +5,31 @@
 const msg=document.querySelector('#msg'),go=document.querySelector('#go'),menu=document.querySelector('#menu'),canvas=document.querySelector('canvas');
 try {
 const T=await import('https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js');
-const renderer=new T.WebGLRenderer({canvas,antialias:true});
-renderer.setPixelRatio(Math.min(devicePixelRatio,1.6));renderer.shadowMap.enabled=true;renderer.shadowMap.type=T.PCFSoftShadowMap;
+const pixelMode=new URLSearchParams(location.search).get('style')==='pixel';
+if(pixelMode){
+  canvas.style.imageRendering='pixelated';
+  document.querySelector('h1').textContent='Rihla · Pixel 3D';
+}
+const renderer=new T.WebGLRenderer({canvas,antialias:!pixelMode});
+renderer.setPixelRatio(pixelMode ? 1 : Math.min(devicePixelRatio,1.6));renderer.shadowMap.enabled=true;renderer.shadowMap.type=T.PCFSoftShadowMap;
 const scene=new T.Scene(),camera=new T.PerspectiveCamera(53,1,.1,420);
 scene.fog=new T.FogExp2(0xb18d93,.008);
-function resize(){renderer.setSize(innerWidth,innerHeight,false);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix()}resize();addEventListener('resize',resize);
+function resize(){const scale=pixelMode ? Math.min(1,300/innerHeight,580/innerWidth) : 1;renderer.setSize(Math.round(innerWidth*scale),Math.round(innerHeight*scale),false);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix()}resize();addEventListener('resize',resize);
 const sky=new T.Mesh(new T.SphereGeometry(350,40,24),new T.ShaderMaterial({side:T.BackSide,depthWrite:false,vertexShader:'varying float h;void main(){h=position.y/350.;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',fragmentShader:'varying float h;void main(){gl_FragColor=vec4(mix(vec3(.87,.55,.42),vec3(.09,.10,.24),smoothstep(-.05,.53,h)),1.); }'}));scene.add(sky);
+if(pixelMode){
+ sky.material.fragmentShader=sky.material.fragmentShader.replace('smoothstep(-.05,.53,h)','floor(smoothstep(-.05,.53,h)*18.)/18.');
+ scene.fog.color.setHex(0xb08391);
+}
 scene.add(new T.HemisphereLight(0xffe0d6,0x755a78,1.65));
 const sun=new T.DirectionalLight(0xffcc91,3);sun.castShadow=true;sun.shadow.mapSize.set(1024,1024);Object.assign(sun.shadow.camera,{left:-14,right:14,top:14,bottom:-14,far:90});sun.shadow.camera.updateProjectionMatrix();sun.shadow.normalBias=.035;scene.add(sun,sun.target);
 function group(parent,x=0,y=0,z=0){const g=new T.Group();g.position.set(x,y,z);parent.add(g);return g}
-function mesh(parent,geo,color,x,y,z){const m=new T.Mesh(geo,new T.MeshStandardMaterial({color,roughness:.85}));m.position.set(x,y,z);m.castShadow=m.receiveShadow=true;parent.add(m);return m}
+function mesh(parent,geo,color,x,y,z){const m=new T.Mesh(geo,new T.MeshStandardMaterial({color,roughness:.85}));if(pixelMode){
+ m.material.onBeforeCompile=shader=>{
+   shader.fragmentShader=shader.fragmentShader.replace('#include <dithering_fragment>',
+    'gl_FragColor.rgb=floor(gl_FragColor.rgb*28.0+0.5)/28.0;');
+ };
+}
+m.position.set(x,y,z);m.castShadow=m.receiveShadow=true;parent.add(m);return m}
 const sphere=new T.SphereGeometry(1,18,14);
 function oval(p,c,x,y,z,a,b,d){const m=mesh(p,sphere,c,x,y,z);m.scale.set(a,b,d);return m}
 function height(x,z){return 2.6*Math.sin(z*.065+.48*Math.sin(x*.09))+1.1*Math.sin(z*.13+x*.07)+2.2*Math.sin(x*.13+z*.025)}
