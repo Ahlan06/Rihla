@@ -925,17 +925,17 @@ marks.material.onBeforeCompile=s=>{
 };
 const starsXYZ=[],starsCol=[];
 const starTints=[[.95,.93,1.0],[.72,.82,1.0],[1.0,.95,.85],[.92,.62,.9]];
-for(let i=0;i<480;i++){
-  const a=i*2.39996,y=.09+.9*((i*.61803)%1),r=Math.sqrt(1-y*y);
+for(let i=0;i<1100;i++){
+  const a=i*2.39996,y=(i+.5)/1100,r=Math.sqrt(1-y*y);
   starsXYZ.push(260*r*Math.sin(a),260*y,260*r*Math.cos(a));
   const k=((i*2654435761)>>>0)%100,c=k<72?0:k<88?1:k<95?2:3;
   starsCol.push(starTints[c][0],starTints[c][1],starTints[c][2]);
 }
 const starsGeo=new T.BufferGeometry();starsGeo.setAttribute('position',new T.Float32BufferAttribute(starsXYZ,3));starsGeo.setAttribute('color',new T.Float32BufferAttribute(starsCol,3));
-const desertStars=new T.Points(starsGeo,new T.PointsMaterial({vertexColors:true,size:.85,transparent:true,depthWrite:false,fog:false}));scene.add(desertStars);
+const desertStars=new T.Points(starsGeo,new T.PointsMaterial({vertexColors:true,size:1.1,transparent:true,depthWrite:false,fog:false}));scene.add(desertStars);
 const sparkleCanvas=document.createElement('canvas');sparkleCanvas.width=sparkleCanvas.height=32;const sparkleInk=sparkleCanvas.getContext('2d');sparkleInk.fillStyle='#fff';sparkleInk.fillRect(13,3,6,26);sparkleInk.fillRect(3,13,26,6);const sparkleTex=new T.CanvasTexture(sparkleCanvas);sparkleTex.colorSpace=T.SRGBColorSpace;sparkleTex.magFilter=T.NearestFilter;
 const sparkleXYZ=[],sparkleCol=[];
-for(let i=0;i<14;i++){const a=i*2.72+.7,y=.12+.72*((i*.37)%1),r=Math.sqrt(1-y*y);sparkleXYZ.push(250*r*Math.sin(a),250*y,250*r*Math.cos(a));const c=i%2?[.95,.55,.95]:[.45,.8,1.0];sparkleCol.push(c[0],c[1],c[2])}
+for(let i=0;i<14;i++){const a=i*2.39996,y=.12+.8*(i+.5)/14,r=Math.sqrt(1-y*y);sparkleXYZ.push(250*r*Math.sin(a),250*y,250*r*Math.cos(a));const c=i%2?[.95,.55,.95]:[.45,.8,1.0];sparkleCol.push(c[0],c[1],c[2])}
 const sparkleGeo=new T.BufferGeometry();sparkleGeo.setAttribute('position',new T.Float32BufferAttribute(sparkleXYZ,3));sparkleGeo.setAttribute('color',new T.Float32BufferAttribute(sparkleCol,3));
 const sparkles=new T.Points(sparkleGeo,new T.PointsMaterial({map:sparkleTex,vertexColors:true,size:2.6,transparent:true,depthWrite:false,fog:false,alphaTest:.1}));scene.add(sparkles);
 const meteors=new T.Group();scene.add(meteors);const meteorCanvas=document.createElement('canvas');meteorCanvas.width=meteorCanvas.height=96;const meteorInk=meteorCanvas.getContext('2d');const meteorGrad=meteorInk.createLinearGradient(0,48,96,48);meteorGrad.addColorStop(0,'rgba(255,244,214,0)');meteorGrad.addColorStop(.55,'rgba(255,244,214,.28)');meteorGrad.addColorStop(1,'rgba(255,252,244,1)');meteorInk.fillStyle=meteorGrad;meteorInk.fillRect(0,44,96,8);const meteorTex=new T.CanvasTexture(meteorCanvas);meteorTex.colorSpace=T.SRGBColorSpace;const meteorPool=[];for(let i=0;i<3;i++){const mm=new T.SpriteMaterial({map:meteorTex,transparent:true,blending:T.AdditiveBlending,depthWrite:false,fog:false});const ms=new T.Sprite(mm);ms.visible=false;meteors.add(ms);meteorPool.push({s:ms,active:false,pos:new T.Vector3(),vel:new T.Vector3(),life:0,maxLife:1,next:2+i*3})}
