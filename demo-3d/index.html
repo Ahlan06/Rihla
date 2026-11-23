@@ -40,7 +40,7 @@ m.position.set(x,y,z);m.castShadow=m.receiveShadow=true;parent.add(m);return m}
 const sphere=new T.SphereGeometry(1,18,14);
 function oval(p,c,x,y,z,a,b,d){const m=mesh(p,sphere,c,x,y,z);m.scale.set(a,b,d);return m}
 const ridgeRoute=new T.CatmullRomCurve3([[22,-148],[33,-148],[41,-144],[47,-133],[49,-114],[48,-94],[44,-76],[37,-61],[26,-50],[20,-39],[12,-33]].map(([x,z])=>new T.Vector3(x,0,z)));
-function height(x,z){const ridge=3.8*Math.exp(-((x-48)**2)/86-((z+105)**2)/880);const edge=Math.max(Math.abs(x)-38,-z-182,z+84,0);const blend=Math.min(1,edge/12);return ridge+blend*blend*(3-2*blend)*( 2.6*Math.sin(z*.065+.48*Math.sin(x*.09))+1.1*Math.sin(z*.13+x*.07)+2.2*Math.sin(x*.13+z*.025))}
+function height(x,z){const ridge=3.8*Math.exp(-((x-48)**2)/86-((z+105)**2)/880);const edge=Math.max(Math.abs(x)-38,-z-182,z+84,0);const blend=Math.min(1,edge/12);const rise=3.2*T.MathUtils.smoothstep(-x,23,35)*(1-T.MathUtils.smoothstep(-x,48,57))*T.MathUtils.smoothstep(-z,108,135)*(1-T.MathUtils.smoothstep(-z,155,169));return rise+ridge+blend*blend*(3-2*blend)*( 2.6*Math.sin(z*.065+.48*Math.sin(x*.09))+1.1*Math.sin(z*.13+x*.07)+2.2*Math.sin(x*.13+z*.025))}
 const land=new T.PlaneGeometry(300,360,180,240);land.rotateX(-Math.PI/2);land.translate(0,0,-95);
 const pos=land.attributes.position,colors=[];
 for(let i=0;i<pos.count;i++){const x=pos.getX(i),z=pos.getZ(i);pos.setY(i,height(x,z));const c=new T.Color().setRGB(.54,.315,.195).multiplyScalar(.96+.04*Math.sin(x*7+z*2)+.025*Math.cos(z*9));colors.push(c.r,c.g,c.b)}
@@ -355,11 +355,59 @@ function buildMedina() {
     pave(side*15,-148,16,10);
     pave(side*19,-129.5,8,27);
     for(const z of [-110,-121,-132,-143,-154]){
-      if(side===1&&z===-143)continue;
+      if((side===1&&z===-143)||(side===-1&&(z===-110||z===-143)))continue;
       const x=side*27,h=z===-132?7:5;
       add(facade,x,h/2,z,7,h,9,side<0?0xe8c3aa:0xe5bb91);
       add(cube,x,h,z,7.5,.35,9.4,0xb78665);
       bounds.push([x,z,3.9,4.9]);
+    }
+  }
+  // A gently climbing lane behind the western market, with a turn at either end.
+  function hillsidePaving(x,z,w,d){
+    const geo=new T.PlaneGeometry(w,d,Math.ceil(w),Math.ceil(d));geo.rotateX(-Math.PI/2);
+    const p=geo.attributes.position,uv=geo.attributes.uv;
+    for(let i=0;i<p.count;i++){
+      const wx=x+p.getX(i),wz=z+p.getZ(i);
+      p.setXYZ(i,wx,height(wx,wz)+.09,wz);uv.setXY(i,wx/2.8,-wz/2.8);
+    }
+    geo.computeVertexNormals();const floor=new T.Mesh(geo,pavingMaterial);
+    floor.receiveShadow=true;scene.add(floor);
+  }
+  hillsidePaving(-29,-110,12,5);hillsidePaving(-35,-126.5,5,38);
+  hillsidePaving(-28,-143,9,5);hillsidePaving(-21.5,-143,4,5);
+  const lime=[0xe4c59b,0xcfa681,0xf1d5ae,0xceaa8a,0xe5b79a];
+  function terrace(x,y,z,w,d){
+    add(cube,x,y,z,w+.24,.25,d+.24,0xc39775);
+    for(const sign of [-1,1]){
+      add(cube,x+sign*(w/2-.13),y+.45,z,.26,.85,d,0xddba97);
+      add(cube,x,y+.45,z+sign*(d/2-.13),w,.85,.26,0xddba97);
+    }
+  }
+  for(const side of [-1,1])for(let i=0;i<5;i++){
+    if(side===1&&(i===0||i===4))continue;
+    const z=-110-i*8.25,x=side<0?-41:-30.5;
+    const w=side<0?6.8:3.6,d=8.12,face=x-side*w/2;
+    const base=height(x,z),top=base+4.9+(i*3+(side+1))%4;
+    const color=lime[(i+(side+1))%lime.length];
+    add(cube,x,(top-1)/2,z,w,top+1,d,color);bounds.push([x,z,w/2+.32,d/2+.28]);
+    terrace(x,top,z,w,d);
+    const upperX=x-side*.34, upperZ=z+.65, upperH=2.6+i%2;
+    add(cube,upperX,top+upperH/2,upperZ,w*.88,upperH,d*.66,color);
+    terrace(upperX,top+upperH,upperZ,w*.88,d*.66);
+    const edge=face-side*.52;
+    add(cube,edge,base+3.45,z,1.18,.24,3.4,0x79563e);
+    add(cube,edge,base+4.7,z,1.14,2.3,3.18,color);
+    for(const off of [-.87,.87]){
+      add(cube,edge-side*.59,base+4.75,z+off,.09,1.18,.85,0x514844);
+      for(let slat=0;slat<4;slat++)add(cube,edge-side*.65,base+4.35+slat*.24,z+off,.09,.075,.83,0x90735b);
+      add(cube,face-side*.26,base+3.03,z+off,.75,.19,.23,0x76543e,-side*.52);
+    }
+    const threshold=height(face,z+2.4);
+    add(cube,face-side*.06,threshold+1.12,z+2.4,.13,2.24,1.18,i%2?0x516560:0x77543d);
+    add(cube,face-side*.15,threshold+2.33,z+2.4,.32,.18,1.55,0xb08967);
+    if(i%2===0){
+      const light=mesh(scene,new T.OctahedronGeometry(.22),0xffb65b,face-side*.36,threshold+2.65,z+1.35);
+      light.material.emissive.setHex(0xfa923e);
     }
   }
   const townsfolk=[];
