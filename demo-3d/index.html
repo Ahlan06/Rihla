@@ -24,23 +24,89 @@ for(let i=0;i<pos.count;i++){const x=pos.getX(i),z=pos.getZ(i);pos.setY(i,height
 land.setAttribute('color',new T.Float32BufferAttribute(colors,3));land.computeVertexNormals();const dunes=new T.Mesh(land,new T.MeshStandardMaterial({vertexColors:true}));dunes.receiveShadow=true;scene.add(dunes);
 for(const [x,z,r] of [[-34,-75,17],[28,-132,24],[49,-145,14]]){const m=mesh(scene,new T.ConeGeometry(r,r*1.25,4),0xb58665,x,height(x,z)+r*.49,z);m.rotation.y=Math.PI/4}
 const moon=new T.Mesh(sphere,new T.MeshBasicMaterial({color:0xffdfa3}));moon.scale.setScalar(8);scene.add(moon);
-const root=group(scene),body=group(root),coat=0x29232b, mane=0x18151d;
-oval(body,coat,0,1.48,0,.51,.59,1.03);oval(body,coat,0,1.52,.54,.55,.60,.62);
-const neck=oval(body,coat,0,1.99,-.72,.32,.72,.39);neck.rotation.x=-.47;
-oval(body,coat,0,2.51,-1.02,.24,.32,.37);oval(body,0x423840,0,2.38,-1.32,.19,.21,.26);
-for(const x of [-.16,.16]){const ear=mesh(body,new T.ConeGeometry(.095,.31,8),coat,x,2.83,-.96);ear.rotation.z=-x}
-const tail=oval(body,mane,0,1.12,1.01,.18,.59,.17);tail.rotation.x=-.22;
+// Cross sections describe the silhouette. Shared rings give continuous normals.
+function sculpt(parent, color, sections, alongBack=false, folds=0) {
+  const vertices=[], triangles=[], uv=[], segments=40;
+  for(const [j,[axis,rx,rz,offset]] of sections.entries()){
+    for(let i=0;i<=segments;i++){
+      const a=i/segments*Math.PI*2;
+      const wave=1+folds*(Math.sin(a*9+j*.21)+.35*Math.sin(a*15-j*.3));
+      const x=rx*Math.cos(a)*wave, v=rz*Math.sin(a)*wave;
+      vertices.push(x,alongBack?offset+v:axis,alongBack?axis:offset+v);
+      uv.push(i/segments,j/(sections.length-1));
+      if(i<segments && j<sections.length-1){
+        const n=j*(segments+1)+i,s=n+segments+1;
+        triangles.push(n,s,n+1,n+1,s,s+1);
+      }
+    }
+  }
+  const geo=new T.BufferGeometry();
+  geo.setAttribute('position',new T.Float32BufferAttribute(vertices,3));
+  geo.setAttribute('uv',new T.Float32BufferAttribute(uv,2));
+  if(alongBack)triangles.reverse();
+  geo.setIndex(triangles);geo.computeVertexNormals();
+  const part=mesh(parent,geo,color,0,0,0);
+  part.material.side=T.DoubleSide;
+  return part;
+}
+function cord(parent,color,radius,points){
+  const curve=new T.CatmullRomCurve3(points.map(p=>new T.Vector3(...p)));
+  return mesh(parent,new T.TubeGeometry(curve,18,radius,6,false),color,0,0,0);
+}
+const root=group(scene),body=group(root),coat=0x30292b,mane=0x19171b;
+sculpt(body,coat,[[-1.04,.04,.12,1.52],[-.86,.33,.45,1.57],[-.57,.46,.53,1.58],[-.21,.48,.53,1.53],[.2,.43,.45,1.55],[.54,.51,.51,1.60],[.77,.52,.48,1.59],[.99,.38,.39,1.56],[1.09,.15,.23,1.55],[1.12,.01,.05,1.51]],true);
+const neck=group(body);
+sculpt(neck,coat,[[1.52,.30,.42,-.60],[1.78,.33,.47,-.65],[2.06,.28,.38,-.79],[2.32,.20,.31,-.92],[2.53,.16,.21,-1.01],[2.61,.09,.12,-1.05]]);
+sculpt(neck,coat,[[-1.59,.10,.085,2.28],[-1.50,.15,.12,2.30],[-1.33,.16,.17,2.39],[-1.18,.21,.24,2.45],[-1.05,.22,.23,2.47],[-.91,.12,.14,2.47]],true);
+for(const s of [-1,1]){
+  const ear=oval(neck,coat,s*.13,2.75,-1.04,.061,.17,.068);ear.rotation.z=-s*.19;
+  oval(neck,0x170f11,s*.191,2.51,-1.24,.038,.041,.053);
+  oval(neck,0x191419,s*.119,2.31,-1.54,.030,.030,.047);
+  cord(neck,0x654739,.018,[[s*.14,2.66,-1],[s*.215,2.43,-1.16],[s*.16,2.30,-1.44]]);
+  cord(body,0x473027,.014,[[s*.16,2.3,-1.44],[s*.35,2.10,-.89],[s*.26,2.41,-.43]]);
+}
+for(let i=0;i<13;i++){
+  const t=i/12;const strand=oval(neck,mane,.035*Math.sin(i*2),2.61-t*.68,-.94+t*.65,.09,.16,.095);
+  strand.rotation.x=-.45;
+}
+const tail=group(body,0,1.83,.98);
+for(let i=0;i<14;i++){
+  const a=i*2.4,dx=.13*Math.cos(a),dz=.10*Math.sin(a);
+  cord(tail,i%3?mane:0x342c30,.032,[[dx*.4,0,dz*.4],[dx,-.28,.18+dz],[dx*.8,-.68,.24+dz],[dx*1.25+.06,-.98-i%4*.04,.19+dz]]);
+}
 const legs=[];
-for(const x of [-.31,.31])for(const z of [-.59,.62]){const hip=group(body,x,1.34,z),knee=group(hip,0,-.59,0);oval(hip,coat,0,-.25,0,.15,.39,.18);oval(knee,coat,0,-.26,0,.085,.31,.095);oval(knee,mane,0,-.55,-.025,.104,.10,.14);legs.push({hip,knee,x,z})}
-oval(body,0x674632,0,1.99,.03,.46,.15,.48);const rider=group(body,0,2,0);
-mesh(rider,new T.CylinderGeometry(.24,.42,.85,20),0xeee6d7,0,.39,0);
-for(const x of [-.37,.37]){oval(rider,0xe5dfd3,x,-.12,.03,.16,.35,.20);oval(rider,0x503a32,x,-.42,-.03,.12,.14,.18);const arm=oval(rider,0xeae2d3,x*.8,.55,-.10,.12,.30,.13);arm.rotation.x=.48}
-const cloth=document.createElement('canvas');cloth.width=cloth.height=64;const brush=cloth.getContext('2d');brush.fillStyle='#eee8da';brush.fillRect(0,0,64,64);brush.strokeStyle='#28252a';brush.lineWidth=3;for(let i=-64;i<128;i+=12){brush.beginPath();brush.moveTo(i,0);brush.lineTo(i+64,64);brush.moveTo(i,0);brush.lineTo(i-64,64);brush.stroke()}
+for(const x of [-.34,.34])for(const z of [-.57,.64]){
+  const hip=group(body,x,1.48,z),hind=z>0,knee=group(hip,0,-.72,hind?.09:0);
+  sculpt(hip,coat,[[-.74,.091,.10,hind?.09:0],[-.50,.12,.14,hind?.12:-.02],[-.19,.17,hind?.24:.19,0],[.10,.18,.21,0],[.32,.10,.12,0]]);
+  sculpt(knee,coat,[[-.66,.065,.08,-.025],[-.55,.084,.09,.008],[-.35,.057,.068,.035],[-.10,.069,.084,.04],[.03,.085,.10,0]]);
+  sculpt(knee,0x292426,[[-.76,.095,.125,-.057],[-.72,.095,.12,-.054],[-.63,.067,.085,-.032]]);
+  legs.push({hip,knee,x,z});
+}
+oval(body,0x6f382c,0,1.95,.12,.49,.17,.58);
+oval(body,0x4d3025,0,2.01,.09,.43,.15,.42);
+const rider=group(body,0,2,0);
+sculpt(rider,0xf3edde,[[-.34,.43,.33,.07],[-.17,.42,.30,.07],[.02,.36,.27,.06],[.28,.25,.185,0],[.52,.27,.18,-.02],[.69,.30,.17,-.04],[.76,.19,.13,-.04]],false,.047);
+for(const s of [-1,1]){
+  oval(rider,0xeae4d8,s*.38,-.19,.07,.14,.32,.18);
+  oval(rider,0x49342d,s*.40,-.48,-.015,.097,.16,.15);
+  cord(rider,0xeae5d8,.085,[[s*.26,.65,-.04],[s*.33,.44,-.14],[s*.26,.42,-.42]]);
+  oval(rider,0x986849,s*.26,.42,-.45,.068,.06,.084);
+}
+oval(rider,0xa77a58,0,.87,-.04,.16,.22,.15);
+const cloth=document.createElement('canvas');cloth.width=cloth.height=128;
+const brush=cloth.getContext('2d');brush.fillStyle='#e8e2d3';brush.fillRect(0,0,128,128);
+for(let y=0;y<128;y+=4)for(let x=0;x<128;x+=4){
+  brush.fillStyle=((x+y)%16<5||(x-y+128)%16<5)?'#292931':'#cbc5b8';
+  brush.fillRect(x,y,3,2);
+}
 const scarf=new T.CanvasTexture(cloth);scarf.colorSpace=T.SRGBColorSpace;
-for(const m of [oval(rider,0xffffff,0,.99,0,.24,.27,.24),oval(rider,0xffffff,0,.73,.16,.31,.31,.15)])m.material.map=scarf;
-oval(rider,0x29242a,0,1.08,0,.244,.052,.242);
-const spirit=group(scene,0,height(0,-80),-80);mesh(spirit,new T.ConeGeometry(.71,2.1,18),0x19171e,0,1.26,0);oval(spirit,0x211e25,0,2.12,0,.38,.49,.36);
-for(const x of [-.13,.13]){const eye=oval(spirit,0xff6841,x,2.17,.33,.066,.025,.037);eye.material.emissive.setHex(0xff4522)}
+const head=oval(rider,0xffffff,0,1.01,-.045,.207,.22,.203);head.material.map=scarf;
+const veil=sculpt(rider,0xffffff,[[.49,.19,.075,.16],[.61,.28,.12,.12],[.76,.245,.145,.09],[.93,.19,.15,.045],[1.03,.18,.15,-.02]],false,.055);veil.material.map=scarf;
+oval(rider,0x221e23,0,1.09,-.045,.202,.036,.201);
+const spirit=group(scene,0,height(0,-80),-80);
+sculpt(spirit,0x211e26,[[.15,.63,.44,0],[.38,.58,.37,0],[1,.48,.29,0],[1.52,.43,.28,0],[1.78,.46,.28,0],[1.94,.27,.21,0]],false,.085);
+oval(spirit,0x211e25,0,2.06,0,.32,.43,.29);oval(spirit,0x0e0d12,0,2.04,.211,.237,.26,.118);
+for(const x of [-.105,.105]){const eye=oval(spirit,0xff6841,x,2.09,.324,.047,.014,.014);eye.material.emissive.setHex(0xff4522)}
 let state='ready',dist=0,lane=0,lateral=0,jump=0,vy=0,last=performance.now();
 function start(){dist=lane=lateral=jump=vy=0;state='run';menu.hidden=true}
 function end(message){state='done';msg.textContent=message;go.textContent='Rejouer';menu.hidden=false}
@@ -51,7 +117,7 @@ addEventListener('keydown',e=>{if(state!=='run'||!['ArrowLeft','ArrowRight','Arr
 let touch=null;canvas.onpointerdown=e=>{touch=e.clientX;canvas.setPointerCapture(e.pointerId)};canvas.onpointerup=e=>{if(touch===null)return;const dx=e.clientX-touch;touch=null;if(Math.abs(dx)>22)move(Math.sign(dx));else leap()};canvas.onpointercancel=()=>touch=null;
 function frame(now){const dt=Math.min(.04,(now-last)/1000);last=now;if(state==='run'){dist+=8*dt;lateral+=(lane*1.75-lateral)*(1-Math.exp(-12*dt));jump=Math.max(0,jump+vy*dt);vy=jump>0?vy-13*dt:0;if(Math.abs(dist-80)<.65&&Math.abs(lateral)<.75)end('Le djinn a barré le passage. Esquive sur le côté.');else if(dist>=160)end('Tu as franchi les dunes.')}
 const z=-dist,ground=height(lateral,z),phase=dist*2.3;root.position.set(lateral,ground+jump,z);root.rotation.x=Math.atan((height(lateral,z-1)-height(lateral,z+1))/2);
-body.position.y=.055*Math.sin(phase*2);rider.rotation.x=.07*Math.sin(phase);tail.rotation.z=.10*Math.sin(phase);
+body.position.y=.055*Math.sin(phase*2);rider.rotation.x=.07*Math.sin(phase);tail.rotation.z=.12*Math.sin(phase*.5);neck.rotation.x=.016*Math.sin(phase*2);
 for(const leg of legs){const t=phase+(leg.x>0?.75:0)+(leg.z>0?2.8:0);leg.hip.rotation.x=jump?.35:.46*Math.sin(t);leg.knee.rotation.x=jump?-.9:-.46*Math.max(0,Math.cos(t))}
 camera.position.set(lateral*.58+1.1,Math.max(ground+3.75,height(lateral,z+5)+2.6),z+5.3);camera.lookAt(lateral*.55,ground+1.7,z-3.5);sky.position.copy(camera.position);moon.position.set(-62,42,z-162);
 sun.position.set(-15,ground+19,z+5);sun.target.position.set(lateral,ground,z);spirit.position.y=height(0,-80)+.15*Math.sin(now*.003);
