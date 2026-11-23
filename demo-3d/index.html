@@ -1,6 +1,6 @@
 <!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Rihla · 3D Ride</title>
 <style>*{box-sizing:border-box}body{margin:0;background:#222039;color:#fff0cf;font:16px system-ui}canvas{width:100vw;height:100dvh;display:block;touch-action:none}header,footer,#menu{position:absolute}header{inset:22px 5% auto;display:flex;justify-content:space-between;font:700 16px monospace;text-shadow:0 2px 5px #111}footer{bottom:14px;width:100%;text-align:center;text-shadow:0 1px 4px black;pointer-events:none}#menu{left:50%;top:32%;transform:translate(-50%,-50%);text-align:center;width:min(90%,480px);text-shadow:0 2px 8px #251c29}h1{font:italic 58px Georgia;margin:4px}button{background:#f1c78c;border:0;border-radius:3px;padding:12px 24px;font:700 16px system-ui;color:#302436}a{color:inherit}button{margin:3px}#pad{position:absolute;bottom:32px;left:20px;width:104px;height:104px;border-radius:50%;background:#2d233b88;border:2px solid #f9dfa0aa;touch-action:none}#stick{display:block;margin:32px;width:36px;height:36px;border-radius:50%;background:#ffe3ab}#map{position:absolute;right:14px;top:59px;width:90px;height:108px;border:1px solid #ebc799}#exit{position:absolute;right:12px;bottom:25px;font-size:14px}#freeUI[hidden]{display:none}</style>
-<canvas aria-label="Rihla desert in 3D"></canvas><header><a href="/">Rihla · 2D</a><span id="score">0 m</span></header><section id="menu"><small>make by Ahlan MIRA</small><h1>Rihla 3D</h1><p id="msg">Ride across the dunes in twenty seconds.</p><button id="go" disabled>Loading…</button><button id="explore" disabled>Free roam</button></section><div id="freeUI" hidden><canvas id="map" width="120" height="144" aria-label="Map showing the pyramids and your position"></canvas><div id="pad" aria-label="Movement joystick"><span id="stick"></span></div><button id="boost" style="position:absolute;right:12px;bottom:139px;font-size:14px;touch-action:none;user-select:none">Gallop</button><button id="mount" style="position:absolute;right:12px;bottom:82px;font-size:14px">Dismount (E)</button><button id="exit">Menu</button></div><footer>← → or swipe to dodge · Space or tap to jump</footer>
+<canvas aria-label="Rihla desert in 3D"></canvas><header><a href="/">Rihla · 2D</a><span id="score">0 m</span></header><section id="menu"><small>made by Ahlan MIRA</small><h1>Rihla 3D</h1><p id="msg">Ride across the dunes in twenty seconds.</p><button id="go" disabled>Loading…</button><button id="explore" disabled>Free roam</button></section><div id="freeUI" hidden><canvas id="map" width="120" height="144" aria-label="Map showing the pyramids and your position"></canvas><div id="pad" aria-label="Movement joystick"><span id="stick"></span></div><button id="boost" style="position:absolute;right:12px;bottom:139px;font-size:14px;touch-action:none;user-select:none">Gallop</button><button id="mount" style="position:absolute;right:12px;bottom:82px;font-size:14px">Dismount (E)</button><button id="exit">Menu</button></div><footer>← → or swipe to dodge · Space or tap to jump</footer>
 <script type="module">
 const msg=document.querySelector('#msg'),go=document.querySelector('#go'),menu=document.querySelector('#menu'),canvas=document.querySelector('canvas');
 try {
@@ -30,12 +30,8 @@ function gust(x,z,t){
 }
 const sun=new T.DirectionalLight(0xffcc91,3);sun.castShadow=true;sun.shadow.mapSize.set(1024,1024);Object.assign(sun.shadow.camera,{left:-14,right:14,top:14,bottom:-14,far:90});sun.shadow.camera.updateProjectionMatrix();sun.shadow.normalBias=.035;scene.add(sun,sun.target);
 function group(parent,x=0,y=0,z=0){const g=new T.Group();g.position.set(x,y,z);parent.add(g);return g}
-function mesh(parent,geo,color,x,y,z){const m=new T.Mesh(geo,new T.MeshStandardMaterial({color,roughness:.85}));if(pixelMode){
- m.material.onBeforeCompile=shader=>{
-   shader.fragmentShader=shader.fragmentShader.replace('#include <dithering_fragment>',
-    'gl_FragColor.rgb=floor(gl_FragColor.rgb*28.0+0.5)/28.0;');
- };
-}
+function pixelate(material){if(!pixelMode)return material;const prev=material.onBeforeCompile;material.onBeforeCompile=shader=>{prev?.(shader);shader.fragmentShader=shader.fragmentShader.replace('#include <dithering_fragment>','gl_FragColor.rgb=floor(gl_FragColor.rgb*28.0+0.5)/28.0;');};return material}
+function mesh(parent,geo,color,x,y,z){const m=new T.Mesh(geo,new T.MeshStandardMaterial({color,roughness:.85}));pixelate(m.material);
 m.position.set(x,y,z);m.castShadow=m.receiveShadow=true;parent.add(m);return m}
 const sphere=new T.SphereGeometry(1,18,14);
 function oval(p,c,x,y,z,a,b,d){const m=mesh(p,sphere,c,x,y,z);m.scale.set(a,b,d);return m}
@@ -61,6 +57,7 @@ dunes.material.onBeforeCompile=shader=>{
     outgoingLight*=mix(vec3(1.),mix(vec3(.43,.55,1.04),vec3(1.14,1.08,1.17),facing),duneNight);
     #include <opaque_fragment>`);
 };
+pixelate(dunes.material);
 for(const [x,z,r] of [[-34,-75,17],[65,-151,24],[83,-169,14]]){const m=mesh(scene,new T.ConeGeometry(r,r*1.25,4),0xb58665,x,height(x,z)+r*.49,z);m.rotation.y=Math.PI/4}
 // Sample the same ground surface as the horse across the entire trail width.
 for(const route of [ridgeRoute,discoveryRoute]){
@@ -80,7 +77,7 @@ const trackGeometry=new T.BufferGeometry();
 trackGeometry.setAttribute('position',new T.Float32BufferAttribute(trackVertices,3));
 trackGeometry.setAttribute('color',new T.Float32BufferAttribute(trackColors,3));
 trackGeometry.setIndex(trackIndices);trackGeometry.computeVertexNormals();
-const track=new T.Mesh(trackGeometry,new T.MeshStandardMaterial({vertexColors:true,side:T.DoubleSide}));
+const track=new T.Mesh(trackGeometry,pixelate(new T.MeshStandardMaterial({vertexColors:true,side:T.DoubleSide})));
 track.receiveShadow=true;scene.add(track);
 }
 const lunarDisc=document.createElement('canvas');lunarDisc.width=lunarDisc.height=40;
@@ -346,7 +343,7 @@ function buildMedina() {
     }
   });
   paving.wrapS=paving.wrapT=T.RepeatWrapping;
-  const pavingMaterial=new T.MeshStandardMaterial({map:paving});
+  const pavingMaterial=pixelate(new T.MeshStandardMaterial({map:paving}));
   function pave(x,z,w,d){
     const geometry=new T.PlaneGeometry(w,d);
     const uv=geometry.attributes.uv;
@@ -650,7 +647,7 @@ function buildMedina() {
     add(dome,x,15.5,-170,1,1.6,1,0xb38862);
   }
   // The eastern trail skirts the water, passes through a hamlet and enters a ruined gateway.
-  const water=new T.Mesh(new T.CircleGeometry(1,40),new T.MeshStandardMaterial({color:0x489d9a,roughness:.32}));
+  const water=new T.Mesh(new T.CircleGeometry(1,40),pixelate(new T.MeshStandardMaterial({color:0x489d9a,roughness:.32})));
   water.rotation.x=-Math.PI/2;water.scale.set(7,4.8,1);water.position.set(51,-.26,-14);scene.add(water);
   for(const [x,z,h] of [[45,-17,6],[55,-10,7],[58,-15,5],[47,-9,5]]){
     const y=height(x,z);add(column,x,y+h/2,z,.43,h,.43,0x846445);bounds.push([x,z,.46,.46]);
@@ -673,7 +670,7 @@ function buildMedina() {
   const lintelY=Math.max(height(104,-87),height(113,-87))+4.15;
   add(cube,108.5,lintelY,-87,10.8,.72,1.9,0xbb9471);
   for(const [shape,items] of batches){
-    const material=new T.MeshStandardMaterial({map:finishes.get(shape)||null,roughness:.94});
+    const material=pixelate(new T.MeshStandardMaterial({map:finishes.get(shape)||null,roughness:.94}));
     const batch=new T.InstancedMesh(shape,material,items.length);
     items.forEach(([matrix,color],i)=>{batch.setMatrixAt(i,matrix);batch.setColorAt(i,new T.Color(color))});
     batch.castShadow=batch.receiveShadow=true;scene.add(batch);
