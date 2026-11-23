@@ -20,7 +20,10 @@ if(pixelMode){
  sky.material.fragmentShader=sky.material.fragmentShader.replace('smoothstep(-.05,.53,h)','floor(smoothstep(-.05,.53,h)*18.)/18.');
  scene.fog.color.setHex(0xb08391);
 }
-scene.add(new T.HemisphereLight(0xffe0d6,0x755a78,1.65));
+const ambient=new T.HemisphereLight(0xffe0d6,0x755a78,1.65);scene.add(ambient);
+sky.material.uniforms.night={value:0};
+sky.material.fragmentShader='uniform float night;'+sky.material.fragmentShader.replace('vec3(.87,.55,.42)','mix(vec3(.87,.55,.42),vec3(.10,.13,.24),night)').replace('vec3(.09,.10,.24)','mix(vec3(.09,.10,.24),vec3(.012,.022,.065),night)');
+const gust=(x,z,t)=>.5+.5*Math.sin(t*1.7-x*.18-z*.07);
 const sun=new T.DirectionalLight(0xffcc91,3);sun.castShadow=true;sun.shadow.mapSize.set(1024,1024);Object.assign(sun.shadow.camera,{left:-14,right:14,top:14,bottom:-14,far:90});sun.shadow.camera.updateProjectionMatrix();sun.shadow.normalBias=.035;scene.add(sun,sun.target);
 function group(parent,x=0,y=0,z=0){const g=new T.Group();g.position.set(x,y,z);parent.add(g);return g}
 function mesh(parent,geo,color,x,y,z){const m=new T.Mesh(geo,new T.MeshStandardMaterial({color,roughness:.85}));if(pixelMode){
@@ -102,6 +105,7 @@ function createCaravanCamp() {
   }
   const weave = new T.CanvasTexture(canvasPaint);
   weave.colorSpace = T.SRGBColorSpace; weave.magFilter = T.NearestFilter;
+  const roofs=[];
   const timber = new T.CylinderGeometry(.07,.09,1,6);
   function pole(x,z,h) {
     const post = mesh(scene,timber,0x664631,x,height(x,z)+h/2,z);
@@ -116,6 +120,7 @@ function createCaravanCamp() {
       const rise=1-Math.abs(x)/2.5;
       points.setXYZ(i,cx+x,height(cx+x,cz+z)+1.45+1.45*rise*rise-.18*Math.cos(z*Math.PI/5),cz+z);
     }
+    roofs.push({points,rest:points.array.slice(),cz});
     roof.computeVertexNormals();
     const cover=mesh(scene,roof,0xffffff,0,0,0);
     cover.material.map=weave; cover.material.side=T.DoubleSide;
@@ -157,8 +162,57 @@ function createCaravanCamp() {
       oval(neckBase,0x342927,side*1.22,1.09,-.76,.025,.03,.035);
     }
     animals.push(neckBase);
+    if(animals.length===1)camel.userData.template=true;
   }
+  const caravan=[];
+  const template=animals[0].parent;
+  for(let i=0;i<3;i++){
+    const camel=template.clone();scene.add(camel);
+    const cargo=group(camel,0,1.65,0);
+    for(const side of [-1,1])mesh(cargo,new T.BoxGeometry(.36,.65,.7),i%2?0x8e5146:0x47706f,side*.46,0,0);
+    caravan.push({camel,cargo,legs:camel.children.filter(p=>p.geometry===timber)});
+  }
+  function traveller(color){
+    const p=group(scene);mesh(p,new T.ConeGeometry(.37,1.34,8),color,0,.79,0);
+    oval(p,0xa07555,0,1.58,0,.17,.22,.16);
+    oval(p,0xe5cb9e,0,1.74,.01,.2,.13,.19);
+    const arm=group(p,.22,1.21,0);
+    oval(arm,color,.04,-.22,0,.1,.27,.1);
+    return {p,arm};
+  }
+  const host=traveller(0x746a58),helper=traveller(0xad7150),guide=traveller(0x746074);
+  function placeVisitor(person,x,z){person.p.position.set(x,height(x,z),z)}
+  placeVisitor(host,4,-38);placeVisitor(helper,10.7,-29);
+  const pot=mesh(host.arm,new T.SphereGeometry(.16,8,6),0xb98651,.05,-.45,-.12);
+  mesh(pot,new T.ConeGeometry(.06,.19,6),0xc19568,0,.02,-.19).rotation.x=-1;
+  const cup=mesh(scene,new T.CylinderGeometry(.11,.085,.18,8),0xe7bb76,4.35,height(4.35,-38.4)+.86,-38.4);
+  mesh(scene,new T.BoxGeometry(.65,.77,.6),0x835942,cup.position.x,cup.position.y-.47,cup.position.z);
+  cord(scene,0x8c6f51,.025,[[11.5,height(11.5,-28.5)+1.45,-28.5],[10.8,height(10.8,-28.9)+.9,-28.9],[10.2,height(10.2,-29.4),-29.4]]);
+  const point=new T.Vector3(),tangent=new T.Vector3();
   return function animateCamp(t) {
+    for(const {points,rest,cz} of roofs){
+      for(let i=0;i<points.count;i++){const k=i*3,z=rest[k+2];
+        points.setY(i,rest[k+1]+.13*Math.cos((z-cz)*Math.PI/5)*gust(rest[k],z,t)*Math.sin(t*4+z));}
+      points.needsUpdate=true;
+    }
+    host.arm.rotation.x=-.9-.5*Math.sin(t*.95);pot.rotation.z=.65*Math.sin(t*.95);
+    helper.arm.rotation.x=-.75-.48*Math.sin(t*1.9);
+    const cycle=(t+9)%152, outbound=cycle<84;
+    const progress=outbound?Math.min(1,cycle/62):Math.max(0,1-(cycle-84)/62);
+    const resting=cycle>=62&&cycle<84||cycle>=146;
+    for(let i=0;i<caravan.length;i++){
+      const {camel,cargo,legs}=caravan[i];
+      const u=.94-progress*.87+i*.017;
+      ridgeRoute.getPointAt(u,point);ridgeRoute.getTangentAt(u,tangent);
+      const x=point.x,z=point.z;
+      const kneel=cycle>=62&&cycle<84?Math.min(1,(cycle-62)/2,(84-cycle)/2):0;
+      camel.position.set(x,height(x,z)+(resting?0:.05*Math.sin(t*4+i)),z);
+      camel.scale.y=1-.44*kneel;
+      camel.rotation.y=Math.atan2(tangent.x,tangent.z)+(outbound?0:Math.PI);
+      legs.forEach((leg,j)=>leg.rotation.x=resting?0:.22*Math.sin(t*4+i+j*2));
+      cargo.position.y=1.65-(i===0?kneel*.85:0);
+      if(i===0){placeVisitor(guide,x+1.25,z);guide.p.rotation.y=camel.rotation.y;guide.arm.rotation.x=kneel?-.9+.4*Math.sin(t*1.8):.26*Math.sin(t*4)}
+    }
     flames.forEach((p,i)=>{
       p.scale.y=.87+.18*Math.sin(t*8+i)+.14*Math.sin(t*13+i*2);
       p.rotation.z=.13*Math.sin(t*5+i);
@@ -172,7 +226,8 @@ function createCaravanCamp() {
     }
     sparks.attributes.position.needsUpdate=true;
     animals.forEach((n,i)=>{
-      n.rotation.x=.07+.24*Math.sin(t*.6+i*2.5);
+      const alert=state==='free'&&!parked&&Math.abs(horseSpeed)>8&&Math.hypot(lateral-n.parent.position.x,worldZ-n.parent.position.z)<15;
+      n.rotation.x=(alert?.48:.07)+.24*Math.sin(t*.6+i*2.5);
       n.rotation.y=.22*Math.sin(t*.83+i);
     });
   };
@@ -635,7 +690,65 @@ function followRider(dt,z,ground){
   root.visible=boomLength>.82;
   camera.lookAt(lateral-sn*3.5,ground+jump*.65+1.65+1.63*close+3.5*Math.tan(lookPitch),z-cs*3.5);
 }
-function frame(now){animateCamp(now*.001);medina.animate(now*.001);const dt=Math.min(.04,(now-last)/1000);last=now;if(state==='free'){
+// Fixed pools keep footprints and windblown sand bounded during long rides.
+const marks=new T.InstancedMesh(new T.CircleGeometry(1,8),new T.MeshBasicMaterial({color:0x916b52,side:T.DoubleSide}),384);
+marks.count=0;marks.frustumCulled=false;scene.add(marks);
+let markIndex=0,lastPrint=null,printStep=0,walkSide=1;
+const stamp=new T.Object3D(),normal=new T.Vector3(),up=new T.Vector3(0,0,1);
+function footprint(x,z,yaw,w,h){
+  if(Math.abs(x)<38&&z<-81&&z>-182)return;
+  normal.set((height(x-.1,z)-height(x+.1,z))*5,1,(height(x,z-.1)-height(x,z+.1))*5).normalize();
+  stamp.position.set(x,height(x,z)+.047,z);
+  stamp.quaternion.setFromUnitVectors(up,normal);stamp.rotateZ(yaw);stamp.scale.set(w,h,1);stamp.updateMatrix();
+  marks.setMatrixAt(markIndex,stamp.matrix);markIndex=(markIndex+1)%384;marks.count=Math.min(384,marks.count+1);marks.instanceMatrix.needsUpdate=true;
+}
+const dustGeo=new T.BufferGeometry(),dustXYZ=new Float32Array(270);
+dustGeo.setAttribute('position',new T.BufferAttribute(dustXYZ,3));
+const dust=new T.Points(dustGeo,new T.PointsMaterial({color:0xf5c48a,size:.13,transparent:true,opacity:.55,depthWrite:false}));dust.frustumCulled=false;scene.add(dust);
+const starsXYZ=[];
+for(let i=0;i<320;i++){
+  const a=i*2.39996,y=.09+.9*((i*.61803)%1),r=Math.sqrt(1-y*y);
+  starsXYZ.push(260*r*Math.sin(a),260*y,260*r*Math.cos(a));
+}
+const starsGeo=new T.BufferGeometry();starsGeo.setAttribute('position',new T.Float32BufferAttribute(starsXYZ,3));
+const desertStars=new T.Points(starsGeo,new T.PointsMaterial({color:0xffe3be,size:.75,transparent:true,depthWrite:false,fog:false}));scene.add(desertStars);
+for(const x of [-4.6,4.6]){
+  const lamp=mesh(scene,new T.OctahedronGeometry(.34),0xffab56,x,3.15,-83.8);
+  lamp.material.emissive.setHex(0xff9c31);
+}
+const duskFog=scene.fog.color.clone(),nightFog=new T.Color(0x34394f);
+let desertTime=0;
+function animateDesert(dt,z){
+  desertTime+=dt;
+  const t=desertTime,night=(1-Math.cos(t*Math.PI/75))*.5;
+  sky.material.uniforms.night.value=night;ambient.intensity=1.65-night*.83;
+  sun.intensity=3-night*2.38;sun.position.y-=night*10;sun.position.x-=night*11;
+  scene.fog.color.lerpColors(duskFog,nightFog,night);
+  desertStars.position.copy(camera.position);desertStars.material.opacity=night;
+  veil.rotation.z=.025*gust(lateral,z,t)*Math.sin(t*4);
+  const sand=Math.abs(lateral)>38||z>-81||z<-182;
+  dust.visible=sand;
+  if(sand)for(let i=0;i<90;i++){
+    const lane=Math.floor(i/9),x=lateral+((lane*9.13+t*3+i%9*.34)%35)-17.5;
+    const pz=z-5+(lane*7.37%28)-14+Math.sin(i*3)*.65;
+    dustXYZ[i*3]=x;dustXYZ[i*3+1]=height(x,pz)+.12+gust(x,pz,t)*(.15+i%4*.12);dustXYZ[i*3+2]=pz;
+  }
+  dustGeo.attributes.position.needsUpdate=true;
+  if(state!=='free'||jump>.08){lastPrint=null;printStep=0;return}
+  if(lastPrint&&lastPrint.mounted===!parked){
+    const distance=Math.hypot(lateral-lastPrint.x,z-lastPrint.z);
+    if(distance<1.5)printStep+=distance;
+    if(printStep>(parked?.68:1.45+Math.abs(horseSpeed)*.095)){
+      printStep=0;walkSide*=-1;
+      for(const side of parked?[walkSide]:[-1,1])for(const fore of parked?[0]:[-.58,.58]){
+        const dx=side*(parked?.115:.31),dz=fore+side*.09;
+        footprint(lateral+Math.cos(heading)*dx+Math.sin(heading)*dz,z-Math.sin(heading)*dx+Math.cos(heading)*dz,heading,parked?.095:.12,parked?.19:.14);
+      }
+    }
+  }
+  lastPrint={x:lateral,z,mounted:!parked};
+}
+function frame(now){animateCamp(desertTime);medina.animate(now*.001);const dt=Math.min(.04,(now-last)/1000);last=now;if(state==='free'){
  const held=(...names)=>Number(names.some(k=>keys.has(k)));
  const turn=held('arrowleft','q','a')-held('arrowright','d')-stickX-scrollX;
  const throttle=held('arrowup','z','w')-held('arrowdown','s')+stickY+scrollY;
@@ -696,6 +809,7 @@ if(state==='free'){
 }
 sky.position.copy(camera.position);moon.position.set(-62,42,z-162);
 sun.position.set(lateral-15,ground+19,z+5);sun.target.position.set(lateral,ground,z);spirit.position.y=height(0,-80)+.15*Math.sin(now*.003);
+animateDesert(dt,z);
 document.querySelector('#score').textContent=(state==='free'?(parked?(horseSpeed>3.6?'Running':'On foot'):Math.abs(horseSpeed)<.2?'Halt':horseSpeed<0?'Back':horseSpeed<4?'Walk':horseSpeed<9?'Trot':horseSpeed<15?'Gallop':'Full gallop')+' · ':'')+Math.floor(dist)+' m';renderer.render(scene,camera);requestAnimationFrame(frame)}requestAnimationFrame(frame)
 }catch(error){msg.textContent='The 3D scene could not load. Check your connection and WebGL support.';go.textContent='Try again';go.disabled=false;go.onclick=()=>location.reload();console.error(error)}
 </script></html>
