@@ -383,28 +383,78 @@ function buildMedina() {
       add(cube,x,y+.45,z+sign*(d/2-.13),w,.85,.26,0xddba97);
     }
   }
+  const plaster=cube.clone(),carved=cube.clone(),screen=cube.clone(),rug=cube.clone();
+  const finishes=new Map([[facade,masonry]]);
+  finishes.set(plaster,surface(96,96,g=>{
+    g.fillStyle='#f0e4cc';g.fillRect(0,0,96,96);
+    let seed=3251;const sample=()=>((seed=seed*16807%2147483647)/2147483647);
+    for(let j=0;j<850;j++){
+      g.fillStyle=j%4?'#e6dac3':'#cabb9e';g.fillRect(sample()*96,sample()*96,1+sample()*3,1);
+    }
+    for(let j=0;j<12;j++){let x=sample()*92,y=sample()*90;
+      for(let k=0;k<5;k++){g.fillStyle='#c9b99c';g.fillRect(x,y,1,2);x+=sample()>.4?1:-1;y++}
+    }
+  }));
+  finishes.set(screen,surface(32,32,g=>{
+    g.fillStyle='#352a28';g.fillRect(0,0,32,32);
+    for(let y=0;y<32;y++)for(let x=0;x<32;x++)if((x+y)%8<2||(32+x-y)%8<2){
+      g.fillStyle=(x+y)%8===0?'#c09465':'#95704e';g.fillRect(x,y,1,1);
+    }
+  }));
+  finishes.set(carved,surface(64,96,g=>{
+    g.fillStyle='#634934';g.fillRect(0,0,64,96);
+    for(const x of [3,33])for(const y of [5,49]){
+      g.fillStyle='#a27c55';g.fillRect(x,y,27,40);g.fillStyle='#49382e';g.fillRect(x+2,y+2,23,36);
+      for(let k=0;k<4;k++){g.strokeStyle=k%2?'#79593e':'#b18b60';g.beginPath();g.moveTo(x+13,y+4+k*3);g.lineTo(x+23-k*2,y+20);g.lineTo(x+13,y+36-k*3);g.lineTo(x+3+k*2,y+20);g.closePath();g.stroke()}
+    }
+  }));
+  finishes.set(rug,surface(32,48,g=>{
+    g.fillStyle='#963f36';g.fillRect(0,0,32,48);
+    for(let y=0;y<48;y++)for(let x=0;x<32;x++){
+      const ring=Math.abs(x-15.5)+Math.abs(y-23.5)*.7;
+      if(x<2||x>29||y<3||y>44||Math.floor(ring)%8<2){g.fillStyle=ring<8?'#426362':'#d1a56b';g.fillRect(x,y,1,1)}
+    }
+  }));
+  const jar=new T.LatheGeometry([[.16,0],[.26,.08],[.34,.34],[.32,.50],[.19,.65],[.17,.74],[.21,.76],[.21,.81],[.14,.81],[.14,.69]].map(([x,y])=>new T.Vector2(x,y)),12);
+  const halo=surface(64,64,g=>{
+    const light=g.createRadialGradient(32,24,1,32,27,33);
+    light.addColorStop(0,'rgba(255,180,84,.65)');light.addColorStop(.4,'rgba(249,156,62,.28)');light.addColorStop(1,'rgba(240,139,42,0)');
+    g.fillStyle=light;g.fillRect(0,0,64,64);
+  });
+  const haloMaterial=new T.MeshBasicMaterial({map:halo,transparent:true,depthWrite:false,blending:T.AdditiveBlending});
+  const haloPlane=new T.PlaneGeometry(2.6,3.3);
   function casbahHouse(side,i,x,z,w,d=8.12){
     const face=x-side*w/2;
     const base=height(x,z),top=base+4.9+(i*3+(side+1))%4;
     const color=lime[(i+(side+1))%lime.length];
     const footing=Math.min(-1,...[-1,1].flatMap(s=>[-1,1].map(t=>height(x+s*w/2,z+t*d/2)-.5)));
-    add(cube,x,(top+footing)/2,z,w,top-footing,d,color);bounds.push([x,z,w/2+.32,d/2+.28]);
+    add(plaster,x,(top+footing)/2,z,w,top-footing,d,color);bounds.push([x,z,w/2+.32,d/2+.28]);
     terrace(x,top,z,w,d);
     const upperX=x-side*.34, upperZ=z+.65, upperH=2.6+i%2;
-    add(cube,upperX,top+upperH/2,upperZ,w*.88,upperH,d*.66,color);
+    add(plaster,upperX,top+upperH/2,upperZ,w*.88,upperH,d*.66,color);
     terrace(upperX,top+upperH,upperZ,w*.88,d*.66);
     const edge=face-side*.52;
     add(cube,edge,base+3.45,z,1.18,.24,3.4,0x79563e);
-    add(cube,edge,base+4.7,z,1.14,2.3,3.18,color);
+    add(screen,edge,base+4.7,z,1.14,2.3,3.18,color);
     for(const off of [-.87,.87]){
       add(cube,edge-side*.59,base+4.75,z+off,.09,1.18,.85,0x514844);
       for(let slat=0;slat<4;slat++)add(cube,edge-side*.65,base+4.35+slat*.24,z+off,.09,.075,.83,0x90735b);
       add(cube,face-side*.26,base+3.03,z+off,.75,.19,.23,0x76543e,-side*.52);
     }
     const threshold=height(face,z+2.4);
-    add(cube,face-side*.06,threshold+1.12,z+2.4,.13,2.24,1.18,i%2?0x516560:0x77543d);
+    add(carved,face-side*.06,threshold+1.12,z+2.4,.13,2.24,1.18,i%2?0xe8ceb0:0xffe3c5);
     add(cube,face-side*.15,threshold+2.33,z+2.4,.32,.18,1.55,0xb08967);
+    const potX=face-side*.43,potZ=z-2.25,potY=height(potX,potZ);
+    add(jar,potX,potY,potZ,1,1.13,1,i%2?0xab7654:0xc0936b);
+    if(i%3===1){
+      add(rug,face-side*.12,base+1.9,z-.85,.12,2.05,1.05,0xffede0);
+      for(let n=0;n<8;n++)add(cube,face-side*.13,base+.83,z-1.31+n*.13,.04,.12,.04,0xd0ae83);
+    }
     if(i%2===0){
+      const wash=new T.Mesh(haloPlane,haloMaterial);
+      wash.rotation.y=-side*Math.PI/2;wash.position.set(face-side*.035,threshold+2.01,z+1.35);scene.add(wash);
+      add(cube,face-side*.23,threshold+3.08,z+1.35,.56,.065,.065,0x463a32);
+      for(const dy of [2.42,2.89])add(column,face-side*.39,threshold+dy,z+1.35,.35,.09,.35,0x504038);
       const light=mesh(scene,new T.OctahedronGeometry(.22),0xffb65b,face-side*.36,threshold+2.65,z+1.35);
       light.material.emissive.setHex(0xfa923e);
     }
@@ -594,7 +644,7 @@ function buildMedina() {
     add(dome,x,15.5,-170,1,1.6,1,0xb38862);
   }
   for(const [shape,items] of batches){
-    const material=new T.MeshStandardMaterial({map:shape===facade?masonry:null,roughness:.94});
+    const material=new T.MeshStandardMaterial({map:finishes.get(shape)||null,roughness:.94});
     const batch=new T.InstancedMesh(shape,material,items.length);
     items.forEach(([matrix,color],i)=>{batch.setMatrixAt(i,matrix);batch.setColorAt(i,new T.Color(color))});
     batch.castShadow=batch.receiveShadow=true;scene.add(batch);
