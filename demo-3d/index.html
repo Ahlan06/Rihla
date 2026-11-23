@@ -22,7 +22,7 @@ if(pixelMode){
 }
 const ambient=new T.HemisphereLight(0xffe0d6,0x755a78,1.65);scene.add(ambient);
 sky.material.uniforms.night={value:0};
-sky.material.fragmentShader='uniform float night;'+sky.material.fragmentShader.replace('vec3(.87,.55,.42)','mix(vec3(.87,.55,.42),vec3(.10,.13,.24),night)').replace('vec3(.09,.10,.24)','mix(vec3(.09,.10,.24),vec3(.012,.022,.065),night)');
+sky.material.fragmentShader='uniform float night;'+sky.material.fragmentShader.replace('vec3(.87,.55,.42)','mix(vec3(.87,.55,.42),vec3(.05,.055,.14),night)').replace('vec3(.09,.10,.24)','mix(vec3(.09,.10,.24),vec3(.006,.006,.04),night)');
 const windFront=t=>-25+(t*3.6)%68;
 function gust(x,z,t){
  const dx=x-windFront(t),dz=z-(-37+x*.17);
@@ -85,16 +85,16 @@ const lunarInk=lunarDisc.getContext('2d');
 const basins=[[12,12,4],[24,14,3],[17,24,5],[30,24,3],[9,20,2],[25,30,2]];
 for(let y=0;y<40;y++)for(let x=0;x<40;x++){
   const radius=Math.hypot(x-19.5,y-19.5);if(radius>19.4)continue;
-  let tone=radius>18.4?'#d4b889':'#ffe6b7';
+  let tone=radius>18.4?'#9a86a8':'#d4bfda';
   for(const [cx,cy,size] of basins){
     const d=Math.hypot(x-cx,y-cy);
-    if(d<size)tone=y<cy?'#caac82':'#dec49a';
-    else if(d<size+1&&y>cy)tone='#fff0cd';
+    if(d<size)tone=y<cy?'#8f7a9e':'#c9b2d2';
+    else if(d<size+1&&y>cy)tone='#f2e6f2';
   }
   lunarInk.fillStyle=tone;lunarInk.fillRect(x,y,1,1);
 }
 const lunarMap=new T.CanvasTexture(lunarDisc);lunarMap.colorSpace=T.SRGBColorSpace;lunarMap.magFilter=T.NearestFilter;
-const moon=new T.Sprite(new T.SpriteMaterial({map:lunarMap,fog:false,depthWrite:false,toneMapped:false}));moon.scale.set(17,17,1);scene.add(moon);
+const moon=new T.Sprite(new T.SpriteMaterial({map:lunarMap,fog:false,depthWrite:false,toneMapped:false}));moon.scale.set(20,20,1);scene.add(moon);
 const moonlight=new T.DirectionalLight(0xb7c9ff,0);scene.add(moonlight,moonlight.target);
 
 // Cross sections describe the silhouette. Shared rings give continuous normals.
@@ -923,13 +923,21 @@ marks.material.onBeforeCompile=s=>{
   s.vertexShader='attribute float strength; varying float coverage;\n'+s.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\ncoverage=strength;');
   s.fragmentShader='varying float coverage;\n'+s.fragmentShader.replace('#include <alphamap_fragment>','#include <alphamap_fragment>\ndiffuseColor.a*=coverage;');
 };
-const starsXYZ=[];
+const starsXYZ=[],starsCol=[];
+const starTints=[[.95,.93,1.0],[.72,.82,1.0],[1.0,.95,.85],[.92,.62,.9]];
 for(let i=0;i<480;i++){
   const a=i*2.39996,y=.09+.9*((i*.61803)%1),r=Math.sqrt(1-y*y);
   starsXYZ.push(260*r*Math.sin(a),260*y,260*r*Math.cos(a));
+  const k=((i*2654435761)>>>0)%100,c=k<72?0:k<88?1:k<95?2:3;
+  starsCol.push(starTints[c][0],starTints[c][1],starTints[c][2]);
 }
-const starsGeo=new T.BufferGeometry();starsGeo.setAttribute('position',new T.Float32BufferAttribute(starsXYZ,3));
-const desertStars=new T.Points(starsGeo,new T.PointsMaterial({color:0xffe3be,size:.85,transparent:true,depthWrite:false,fog:false}));scene.add(desertStars);
+const starsGeo=new T.BufferGeometry();starsGeo.setAttribute('position',new T.Float32BufferAttribute(starsXYZ,3));starsGeo.setAttribute('color',new T.Float32BufferAttribute(starsCol,3));
+const desertStars=new T.Points(starsGeo,new T.PointsMaterial({vertexColors:true,size:.85,transparent:true,depthWrite:false,fog:false}));scene.add(desertStars);
+const sparkleCanvas=document.createElement('canvas');sparkleCanvas.width=sparkleCanvas.height=32;const sparkleInk=sparkleCanvas.getContext('2d');sparkleInk.fillStyle='#fff';sparkleInk.fillRect(13,3,6,26);sparkleInk.fillRect(3,13,26,6);const sparkleTex=new T.CanvasTexture(sparkleCanvas);sparkleTex.colorSpace=T.SRGBColorSpace;sparkleTex.magFilter=T.NearestFilter;
+const sparkleXYZ=[],sparkleCol=[];
+for(let i=0;i<14;i++){const a=i*2.72+.7,y=.12+.72*((i*.37)%1),r=Math.sqrt(1-y*y);sparkleXYZ.push(250*r*Math.sin(a),250*y,250*r*Math.cos(a));const c=i%2?[.95,.55,.95]:[.45,.8,1.0];sparkleCol.push(c[0],c[1],c[2])}
+const sparkleGeo=new T.BufferGeometry();sparkleGeo.setAttribute('position',new T.Float32BufferAttribute(sparkleXYZ,3));sparkleGeo.setAttribute('color',new T.Float32BufferAttribute(sparkleCol,3));
+const sparkles=new T.Points(sparkleGeo,new T.PointsMaterial({map:sparkleTex,vertexColors:true,size:2.6,transparent:true,depthWrite:false,fog:false,alphaTest:.1}));scene.add(sparkles);
 const meteors=new T.Group();scene.add(meteors);const meteorCanvas=document.createElement('canvas');meteorCanvas.width=meteorCanvas.height=96;const meteorInk=meteorCanvas.getContext('2d');const meteorGrad=meteorInk.createLinearGradient(0,48,96,48);meteorGrad.addColorStop(0,'rgba(255,244,214,0)');meteorGrad.addColorStop(.55,'rgba(255,244,214,.28)');meteorGrad.addColorStop(1,'rgba(255,252,244,1)');meteorInk.fillStyle=meteorGrad;meteorInk.fillRect(0,44,96,8);const meteorTex=new T.CanvasTexture(meteorCanvas);meteorTex.colorSpace=T.SRGBColorSpace;const meteorPool=[];for(let i=0;i<3;i++){const mm=new T.SpriteMaterial({map:meteorTex,transparent:true,blending:T.AdditiveBlending,depthWrite:false,fog:false});const ms=new T.Sprite(mm);ms.visible=false;meteors.add(ms);meteorPool.push({s:ms,active:false,pos:new T.Vector3(),vel:new T.Vector3(),life:0,maxLife:1,next:2+i*3})}
 for(const x of [-4.6,4.6]){
   const lamp=mesh(scene,new T.OctahedronGeometry(.34),0xffab56,x,3.15,-83.8);
@@ -947,7 +955,7 @@ function animateDesert(dt,z){
   moonlight.position.set(lateral-13,root.position.y+13,z-20);moonlight.target.position.set(lateral,root.position.y+1,z);
   sun.intensity=3-night*2.38;sun.position.y-=night*10;sun.position.x-=night*11;
   scene.fog.color.lerpColors(duskFog,nightFog,night);
-  desertStars.position.copy(camera.position);desertStars.material.opacity=night*(.82+.18*Math.sin(t*1.1+Math.sin(t*.3)));
+  desertStars.position.copy(camera.position);desertStars.material.opacity=night*(.82+.18*Math.sin(t*1.1+Math.sin(t*.3)));sparkles.position.copy(camera.position);sparkles.material.opacity=night;
   meteors.position.copy(camera.position);
   for(const m of meteorPool){if(!m.active){if(t>=m.next&&night>.05){m.active=true;m.life=0;m.maxLife=.7+Math.random()*.5;const az=Math.random()*Math.PI*2,el=.22+Math.random()*.42,r=170+Math.random()*50;m.pos.set(r*Math.cos(el)*Math.sin(az),r*Math.sin(el),r*Math.cos(el)*Math.cos(az));const sp=60+Math.random()*50;m.vel.set(Math.sin(az)*sp,-(8+Math.random()*16),Math.cos(az)*sp);m.s.visible=true;m.s.material.rotation=Math.sin(az)<0?Math.PI:0;m.s.scale.set(7,1.1,1)}else m.s.visible=false;continue}m.life+=dt;if(m.life>=m.maxLife){m.active=false;m.next=t+2+Math.random()*5;m.s.visible=false;continue}m.pos.addScaledVector(m.vel,dt);m.s.position.copy(m.pos);m.s.material.opacity=night*Math.sin(Math.PI*Math.min(1,m.life/m.maxLife))}
   veil.rotation.z=.025*gust(lateral,z,t)*Math.sin(t*4);
