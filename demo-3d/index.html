@@ -924,12 +924,13 @@ marks.material.onBeforeCompile=s=>{
   s.fragmentShader='varying float coverage;\n'+s.fragmentShader.replace('#include <alphamap_fragment>','#include <alphamap_fragment>\ndiffuseColor.a*=coverage;');
 };
 const starsXYZ=[];
-for(let i=0;i<320;i++){
+for(let i=0;i<480;i++){
   const a=i*2.39996,y=.09+.9*((i*.61803)%1),r=Math.sqrt(1-y*y);
   starsXYZ.push(260*r*Math.sin(a),260*y,260*r*Math.cos(a));
 }
 const starsGeo=new T.BufferGeometry();starsGeo.setAttribute('position',new T.Float32BufferAttribute(starsXYZ,3));
-const desertStars=new T.Points(starsGeo,new T.PointsMaterial({color:0xffe3be,size:.75,transparent:true,depthWrite:false,fog:false}));scene.add(desertStars);
+const desertStars=new T.Points(starsGeo,new T.PointsMaterial({color:0xffe3be,size:.85,transparent:true,depthWrite:false,fog:false}));scene.add(desertStars);
+const meteors=new T.Group();scene.add(meteors);const meteorCanvas=document.createElement('canvas');meteorCanvas.width=meteorCanvas.height=96;const meteorInk=meteorCanvas.getContext('2d');const meteorGrad=meteorInk.createLinearGradient(0,48,96,48);meteorGrad.addColorStop(0,'rgba(255,244,214,0)');meteorGrad.addColorStop(.55,'rgba(255,244,214,.28)');meteorGrad.addColorStop(1,'rgba(255,252,244,1)');meteorInk.fillStyle=meteorGrad;meteorInk.fillRect(0,44,96,8);const meteorTex=new T.CanvasTexture(meteorCanvas);meteorTex.colorSpace=T.SRGBColorSpace;const meteorPool=[];for(let i=0;i<3;i++){const mm=new T.SpriteMaterial({map:meteorTex,transparent:true,blending:T.AdditiveBlending,depthWrite:false,fog:false});const ms=new T.Sprite(mm);ms.visible=false;meteors.add(ms);meteorPool.push({s:ms,active:false,pos:new T.Vector3(),vel:new T.Vector3(),life:0,maxLife:1,next:2+i*3})}
 for(const x of [-4.6,4.6]){
   const lamp=mesh(scene,new T.OctahedronGeometry(.34),0xffab56,x,3.15,-83.8);
   lamp.material.emissive.setHex(0xff9c31);
@@ -946,7 +947,9 @@ function animateDesert(dt,z){
   moonlight.position.set(lateral-13,root.position.y+13,z-20);moonlight.target.position.set(lateral,root.position.y+1,z);
   sun.intensity=3-night*2.38;sun.position.y-=night*10;sun.position.x-=night*11;
   scene.fog.color.lerpColors(duskFog,nightFog,night);
-  desertStars.position.copy(camera.position);desertStars.material.opacity=night;
+  desertStars.position.copy(camera.position);desertStars.material.opacity=night*(.82+.18*Math.sin(t*1.1+Math.sin(t*.3)));
+  meteors.position.copy(camera.position);
+  for(const m of meteorPool){if(!m.active){if(t>=m.next&&night>.05){m.active=true;m.life=0;m.maxLife=.7+Math.random()*.5;const az=Math.random()*Math.PI*2,el=.22+Math.random()*.42,r=170+Math.random()*50;m.pos.set(r*Math.cos(el)*Math.sin(az),r*Math.sin(el),r*Math.cos(el)*Math.cos(az));const sp=60+Math.random()*50;m.vel.set(Math.sin(az)*sp,-(8+Math.random()*16),Math.cos(az)*sp);m.s.visible=true;m.s.material.rotation=Math.sin(az)<0?Math.PI:0;m.s.scale.set(7,1.1,1)}else m.s.visible=false;continue}m.life+=dt;if(m.life>=m.maxLife){m.active=false;m.next=t+2+Math.random()*5;m.s.visible=false;continue}m.pos.addScaledVector(m.vel,dt);m.s.position.copy(m.pos);m.s.material.opacity=night*Math.sin(Math.PI*Math.min(1,m.life/m.maxLife))}
   veil.rotation.z=.025*gust(lateral,z,t)*Math.sin(t*4);
   const front=windFront(t);
   wisps.forEach((sheet,k)=>{
