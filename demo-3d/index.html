@@ -32,7 +32,7 @@ function mesh(parent,geo,color,x,y,z){const m=new T.Mesh(geo,new T.MeshStandardM
 m.position.set(x,y,z);m.castShadow=m.receiveShadow=true;parent.add(m);return m}
 const sphere=new T.SphereGeometry(1,18,14);
 function oval(p,c,x,y,z,a,b,d){const m=mesh(p,sphere,c,x,y,z);m.scale.set(a,b,d);return m}
-function height(x,z){return 2.6*Math.sin(z*.065+.48*Math.sin(x*.09))+1.1*Math.sin(z*.13+x*.07)+2.2*Math.sin(x*.13+z*.025)}
+function height(x,z){const edge=Math.max(Math.abs(x)-20,-z-182,z+84,0);const blend=Math.min(1,edge/12);return blend*blend*(3-2*blend)*( 2.6*Math.sin(z*.065+.48*Math.sin(x*.09))+1.1*Math.sin(z*.13+x*.07)+2.2*Math.sin(x*.13+z*.025))}
 const land=new T.PlaneGeometry(300,360,180,240);land.rotateX(-Math.PI/2);land.translate(0,0,-95);
 const pos=land.attributes.position,colors=[];
 for(let i=0;i<pos.count;i++){const x=pos.getX(i),z=pos.getZ(i);pos.setY(i,height(x,z));const c=new T.Color().setRGB(.54,.315,.195).multiplyScalar(.96+.04*Math.sin(x*7+z*2)+.025*Math.cos(z*9));colors.push(c.r,c.g,c.b)}
@@ -159,6 +159,109 @@ function createCaravanCamp() {
 }
 const animateCamp=createCaravanCamp();
 
+function buildMedina() {
+  const cube=new T.BoxGeometry(), dome=new T.SphereGeometry(1,20,10,0,Math.PI*2,0,Math.PI/2);
+  const column=new T.CylinderGeometry(.5,.55,1,12), finial=new T.ConeGeometry(.5,1,8);
+  const batches=new Map(), bounds=[];
+  function add(shape,x,y,z,w,h,d,color,rotation=0) {
+    if(!batches.has(shape)) batches.set(shape,[]);
+    const pose=new T.Object3D();
+    pose.position.set(x,y,z); pose.scale.set(w,h,d); pose.rotation.z=rotation; pose.updateMatrix();
+    batches.get(shape).push([pose.matrix,color]);
+  }
+  function surface(w,h,draw) {
+    const sheet=document.createElement('canvas'); sheet.width=w; sheet.height=h;
+    draw(sheet.getContext('2d'));
+    const tex=new T.CanvasTexture(sheet); tex.colorSpace=T.SRGBColorSpace; tex.magFilter=T.NearestFilter;
+    return tex;
+  }
+  const facade=cube.clone();
+  const masonry=surface(96,96,g=>{
+    g.fillStyle='#ddb288';g.fillRect(0,0,96,96);
+    for(let i=0;i<210;i++){
+      g.fillStyle=i%2?'#c79b77':'#e7bf95';g.fillRect((i*47)%96,(i*37+Math.floor(i/7))%96,2+i%5,1);
+    }
+    for(const y of [7,12,51,84]){g.fillStyle='#ad785b';g.fillRect(0,y,96,2)}
+    for(const y of [17,57])for(const x of [10,39,68]){
+      g.fillStyle='#8b624e';g.fillRect(x-2,y+7,17,16);
+      g.fillStyle='#413038';g.beginPath();g.moveTo(x,y+21);g.lineTo(x,y+8);g.quadraticCurveTo(x+2,y+3,x+6,y);g.quadraticCurveTo(x+12,y+4,x+13,y+8);g.lineTo(x+13,y+21);g.fill();
+      g.fillStyle='#936f58';for(let j=2;j<13;j+=4)g.fillRect(x+j,y+9,1,12);
+      g.fillRect(x,y+14,13,1);
+    }
+  });
+  const paving=surface(64,64,g=>{
+    g.fillStyle='#876f63';g.fillRect(0,0,64,64);
+    for(let row=0;row<8;row++)for(let col=-1;col<5;col++){
+      g.fillStyle=['#bea087','#c8a98b','#b69782'][Math.abs(row*7+col)%3];
+      g.fillRect(col*16+(row%2)*8,row*8,15,7);
+    }
+  });
+  paving.wrapS=paving.wrapT=T.RepeatWrapping;paving.repeat.set(6,24);
+  const street=new T.Mesh(new T.PlaneGeometry(14,68),new T.MeshStandardMaterial({map:paving}));
+  street.rotation.x=-Math.PI/2;street.position.set(0,.07,-116);street.receiveShadow=true;scene.add(street);
+  const townsfolk=[];
+  function person(x,z,shade,merchant) {
+    const p=group(scene,x,.08,z), torso=group(p,0,.43,0);
+    mesh(torso,new T.ConeGeometry(.29,1.06,8),shade,0,.51,0);
+    oval(torso,0x935f44,0,1.16,0,.15,.21,.16);
+    oval(torso,0xe6ceaa,0,1.29,0,.18,.12,.18);
+    const arm=group(torso,.19,.88,0);
+    oval(arm,shade,.035,-.19,0,.085,.24,.085);
+    const feet=[-.11,.11].map(dx=>oval(p,0x553b34,dx,.23,0,.085,.23,.11));
+    townsfolk.push({p,torso,arm,feet,x,z,merchant});
+  }
+  for(const side of [-1,1])for(let i=0;i<6;i++){
+    const z=-88-i*11, x=side*(10+(i%2)), h=5+(i*3+(side+1))%5;
+    add(facade,x,h/2,z,7,h,9,side===1?0xffe8c6:0xffcfb6);
+    bounds.push([x,z,3.85,4.85]);
+    add(cube,x,h,z,7.5,.38,9.5,0xd3a17c);
+    add(cube,x,h+.32,z,7,.38,9,0xb98565);
+    if(i%2===0){
+      add(dome,x,h+.5,z,2.75,2.4,2.75,0xe0b077);
+      add(finial,x,h+3.15,z,.33,.75,.33,0x95714e);
+    }
+    if(i%2===1){
+      const sx=side*5.4;
+      for(let j=0;j<6;j++)add(cube,sx,2.52,z-2+j*.81,2.9,.14,.83,j%2?0xe4c897:(i===3?0x477e79:0x994c43),side*.12);
+      for(const dz of [-2.3,2.3])add(column,side*4.1,1.22,z+dz,.12,2.5,.12,0x684536);
+      add(cube,sx,.52,z,1.3,.94,4.4,0x825539);
+      for(let k=0;k<12;k++)add(dome,sx+(k%2)*.38-.2,1.01,z-1.65+Math.floor(k/2)*.62,.24,.27,.27,[0xb95735,0xcaa44c,0x768953][k%3]);
+      person(side*6.3,z,i===3?0x546f70:0x994e3e,true);
+    }
+    person(side*3.45,z, [0x7d555e,0x657a77,0xbc8d57,0xd7c4a7][(i+(side+1))%4],false);
+  }
+  // The domed hall anchors the view at the far end of the street.
+  add(facade,0,5,-170,17,10,12,0xffdfa8);bounds.push([0,-170,9,6.5]);
+  add(column,0,10.6,-170,12,1.4,12,0xc99c72);
+  add(dome,0,11.3,-170,6,6.3,6,0xe7bb78);
+  add(finial,0,18.2,-170,.6,1.5,.6,0x916540);
+  for(const x of [-10,10]){
+    add(column,x,6,-170,2.2,12,2.2,0xe4bd97);
+    add(column,x,12,-170,3,.6,3,0x996b53);
+    add(column,x,13.8,-170,1.5,3.4,1.5,0xdebb99);
+    add(dome,x,15.5,-170,1,1.6,1,0xb38862);
+  }
+  for(const [shape,items] of batches){
+    const material=new T.MeshStandardMaterial({map:shape===facade?masonry:null,roughness:.94});
+    const batch=new T.InstancedMesh(shape,material,items.length);
+    items.forEach(([matrix,color],i)=>{batch.setMatrixAt(i,matrix);batch.setColorAt(i,new T.Color(color))});
+    batch.castShadow=batch.receiveShadow=true;scene.add(batch);
+  }
+  return {
+    blocked(x,z){return bounds.some(([cx,cz,w,d])=>Math.abs(x-cx)<w&&Math.abs(z-cz)<d)},
+    animate(t){townsfolk.forEach(({p,torso,arm,feet,x,z,merchant},i)=>{
+      const phase=t*.45+i;
+      if(merchant){arm.rotation.x=-.8+.55*Math.sin(t*1.8+i);p.rotation.y=x>0?-Math.PI/2:Math.PI/2;return}
+      p.position.z=z+2.8*Math.sin(phase);p.rotation.y=Math.atan2(.14*Math.sin(phase),Math.cos(phase));
+      const stride=Math.sin(t*5+i)*Math.abs(Math.cos(phase));
+      feet[0].rotation.x=stride*.58;feet[1].rotation.x=-stride*.58;
+      torso.position.y=.43+.035*Math.abs(stride);arm.rotation.x=.35*stride;
+    })}
+  };
+}
+const medina=buildMedina();
+
+
 const root=group(scene),body=group(root),coat=0x30292b,mane=0x19171b;
 sculpt(body,coat,[[-1.04,.04,.12,1.52],[-.86,.33,.45,1.57],[-.57,.46,.53,1.58],[-.21,.48,.53,1.53],[.2,.43,.45,1.55],[.54,.51,.51,1.60],[.77,.52,.48,1.59],[.99,.38,.39,1.56],[1.09,.15,.23,1.55],[1.12,.01,.05,1.51]],true);
 const neck=group(body);
@@ -245,7 +348,7 @@ function move(dir){if(state==='run')lane=Math.max(-1,Math.min(1,lane+dir))}
 go.disabled=false;go.textContent='Start ride';go.onclick=start;
 addEventListener('keydown',e=>{if(state!=='run'||!['ArrowLeft','ArrowRight','ArrowUp','Space'].includes(e.code))return;e.preventDefault();if(e.repeat)return;if(e.code==='ArrowLeft')move(-1);else if(e.code==='ArrowRight')move(1);else leap()});
 let touch=null;canvas.onpointerdown=e=>{touch=e.clientX;canvas.setPointerCapture(e.pointerId)};canvas.onpointerup=e=>{if(touch===null)return;const dx=e.clientX-touch;touch=null;if(Math.abs(dx)>22)move(Math.sign(dx));else leap()};canvas.onpointercancel=()=>touch=null;
-function frame(now){animateCamp(now*.001);const dt=Math.min(.04,(now-last)/1000);last=now;if(state==='free'){
+function frame(now){animateCamp(now*.001);medina.animate(now*.001);const dt=Math.min(.04,(now-last)/1000);last=now;if(state==='free'){
  const held=(...names)=>Number(names.some(k=>keys.has(k)));
  const turn=held('arrowleft','q','a')-held('arrowright','d')-stickX-scrollX;
  const throttle=held('arrowup','z','w')-held('arrowdown','s')+stickY+scrollY;
@@ -253,7 +356,7 @@ function frame(now){animateCamp(now*.001);const dt=Math.min(.04,(now-last)/1000)
  const step=Math.max(-1,Math.min(1,throttle))*dt*10;
  const x=Math.max(-145,Math.min(145,lateral-Math.sin(heading)*step));
  const nextZ=Math.max(-270,Math.min(80,worldZ-Math.cos(heading)*step));
- dist+=Math.hypot(x-lateral,nextZ-worldZ);lateral=x;worldZ=nextZ;
+ if(!medina.blocked(x,nextZ)){dist+=Math.hypot(x-lateral,nextZ-worldZ);lateral=x;worldZ=nextZ;}
  scrollX*=Math.exp(-5*dt);scrollY*=Math.exp(-5*dt);jump=Math.max(0,jump+vy*dt);vy=jump>0?vy-13*dt:0;paintMap();
 }
 if(state==='run'){dist+=8*dt;lateral+=(lane*1.75-lateral)*(1-Math.exp(-12*dt));jump=Math.max(0,jump+vy*dt);vy=jump>0?vy-13*dt:0;if(Math.abs(dist-80)<.65&&Math.abs(lateral)<.75)end('The djinn blocked your path. Dodge to either side.');else if(dist>=160)end('You made it across the dunes!')}
