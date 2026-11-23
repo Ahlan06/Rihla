@@ -1,6 +1,6 @@
 <!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Rihla · 3D Ride</title>
 <style>*{box-sizing:border-box}body{margin:0;background:#222039;color:#fff0cf;font:16px system-ui}canvas{width:100vw;height:100dvh;display:block;touch-action:none}header,footer,#menu{position:absolute}header{inset:22px 5% auto;display:flex;justify-content:space-between;font:700 16px monospace;text-shadow:0 2px 5px #111}footer{bottom:14px;width:100%;text-align:center;text-shadow:0 1px 4px black;pointer-events:none}#menu{left:50%;top:32%;transform:translate(-50%,-50%);text-align:center;width:min(90%,480px);text-shadow:0 2px 8px #251c29}h1{font:italic 58px Georgia;margin:4px}button{background:#f1c78c;border:0;border-radius:3px;padding:12px 24px;font:700 16px system-ui;color:#302436}a{color:inherit}button{margin:3px}#pad{position:absolute;bottom:32px;left:20px;width:104px;height:104px;border-radius:50%;background:#2d233b88;border:2px solid #f9dfa0aa;touch-action:none}#stick{display:block;margin:32px;width:36px;height:36px;border-radius:50%;background:#ffe3ab}#map{position:absolute;right:14px;top:59px;width:90px;height:108px;border:1px solid #ebc799}#exit{position:absolute;right:12px;bottom:25px;font-size:14px}#freeUI[hidden]{display:none}</style>
-<canvas aria-label="Rihla desert in 3D"></canvas><header><a href="/">Rihla · 2D</a><span id="score">0 m</span></header><section id="menu"><small>make by Ahlan MIRA</small><h1>Rihla 3D</h1><p id="msg">Ride across the dunes in twenty seconds.</p><button id="go" disabled>Loading…</button><button id="explore" disabled>Free roam</button></section><div id="freeUI" hidden><canvas id="map" width="120" height="144" aria-label="Map showing the pyramids and your position"></canvas><div id="pad" aria-label="Movement joystick"><span id="stick"></span></div><button id="mount" style="position:absolute;right:12px;bottom:82px;font-size:14px">Dismount (E)</button><button id="exit">Menu</button></div><footer>← → or swipe to dodge · Space or tap to jump</footer>
+<canvas aria-label="Rihla desert in 3D"></canvas><header><a href="/">Rihla · 2D</a><span id="score">0 m</span></header><section id="menu"><small>make by Ahlan MIRA</small><h1>Rihla 3D</h1><p id="msg">Ride across the dunes in twenty seconds.</p><button id="go" disabled>Loading…</button><button id="explore" disabled>Free roam</button></section><div id="freeUI" hidden><canvas id="map" width="120" height="144" aria-label="Map showing the pyramids and your position"></canvas><div id="pad" aria-label="Movement joystick"><span id="stick"></span></div><button id="boost" style="position:absolute;right:12px;bottom:139px;font-size:14px;touch-action:none;user-select:none">Gallop</button><button id="mount" style="position:absolute;right:12px;bottom:82px;font-size:14px">Dismount (E)</button><button id="exit">Menu</button></div><footer>← → or swipe to dodge · Space or tap to jump</footer>
 <script type="module">
 const msg=document.querySelector('#msg'),go=document.querySelector('#go'),menu=document.querySelector('#menu'),canvas=document.querySelector('canvas');
 try {
@@ -500,11 +500,18 @@ const freeUI=document.querySelector('#freeUI'),pad=document.querySelector('#pad'
 const map=document.querySelector('#map').getContext('2d'),keys=new Set();
 let heading=0,worldZ=0,stickX=0,stickY=0,scrollX=0,scrollY=0,drag=null;
 let horseSpeed=0,stridePhase=0;
-function clearInput(){horseSpeed=0;stridePhase=0;keys.clear();stickX=stickY=scrollX=scrollY=0;drag=null;stick.style.transform='none'}
+function clearInput(){touchBoost=false;horseSpeed=0;stridePhase=0;keys.clear();stickX=stickY=scrollX=scrollY=0;drag=null;stick.style.transform='none'}
 addEventListener('blur',clearInput);
 const mountButton=document.querySelector('#mount');
 let parked=null;
-const ridingHelp='Arrows to ride · Alt to walk · Shift to gallop · Push stick farther to go faster';
+let touchBoost=false;
+const boostButton=document.querySelector('#boost');
+boostButton.onpointerdown=e=>{
+  if(state!=='free')return;
+  boostButton.setPointerCapture(e.pointerId);touchBoost=true;
+};
+boostButton.onpointerup=boostButton.onpointercancel=boostButton.onlostpointercapture=()=>{touchBoost=false};
+const ridingHelp='Move forward + hold Shift or Gallop to accelerate · Alt to walk';
 function nearHorse(){return parked && Math.hypot(lateral-parked.x,worldZ-parked.z)<2.9}
 function changeMount(){
   if(state!=='free'||jump>0||vy!==0)return;
@@ -521,7 +528,7 @@ function changeMount(){
     if(!spot){document.querySelector('footer').textContent='Find more room beside your horse to dismount.';return}
     parked={x:lateral,z:worldZ,heading};lateral=spot.x;worldZ=spot.z;
     heading=Math.atan2(lateral-parked.x,worldZ-parked.z);
-    document.querySelector('footer').textContent='Walk with the arrows or joystick · Return to your horse to mount';
+    document.querySelector('footer').textContent='Move forward + hold Shift or Sprint to run · Return to your horse to mount';
   }
   clearInput();lastCameraState='';
 }
@@ -530,7 +537,7 @@ addEventListener('keydown',e=>{if(state==='free'&&e.code==='KeyE'&&!e.repeat){e.
 function returnMenu(){parked=null;rider.visible=true;state='ready';freeUI.hidden=true;menu.hidden=false;clearInput();dist=lateral=worldZ=heading=jump=vy=0;msg.textContent='Choose your ride.';document.querySelector('footer').textContent='← → or swipe to dodge · Space or tap to jump'}
 document.querySelector('#exit').onclick=returnMenu;
 const explore=document.querySelector('#explore');explore.disabled=false;
-explore.onclick=()=>{returnMenu();state='free';freeUI.hidden=false;menu.hidden=true;document.querySelector('footer').textContent='Arrows to ride · Alt to walk · Shift to gallop · Push stick farther to go faster'};
+explore.onclick=()=>{returnMenu();state='free';freeUI.hidden=false;menu.hidden=true;document.querySelector('footer').textContent='Move forward + hold Shift or Gallop to accelerate · Alt to walk'};
 function joystick(e){
  const box=pad.getBoundingClientRect(),x=(e.clientX-box.left-box.width/2)/36,y=(e.clientY-box.top-box.height/2)/36;
  const length=Math.max(1,Math.hypot(x,y));stickX=x/length;stickY=-y/length;stick.style.transform='translate('+stickX*30+'px,'+(-stickY*30)+'px)';
@@ -602,10 +609,11 @@ function frame(now){animateCamp(now*.001);medina.animate(now*.001);const dt=Math
  const throttle=held('arrowup','z','w')-held('arrowdown','s')+stickY+scrollY;
  const power=Math.min(1,Math.abs(throttle));
  const keyboard=held('arrowup','z','w','arrowdown','s');
- const gait=keyboard?(keys.has('alt')?3:keys.has('shift')?14:7):(power<.4?3:power<.76?7:14);
- const target=parked?(power<.07?0:Math.sign(throttle)*power*3.4):(power<.07?0:throttle<0?-2.5:gait);
+ const boosting=keys.has('shift')||touchBoost;
+ const gait=boosting?21:keyboard?(keys.has('alt')?3:7):(power<.4?3:power<.76?7:14);
+ const target=parked?(power<.07?0:Math.sign(throttle)*power*(boosting&&throttle>0?8:3.4)):(power<.07?0:throttle<0?-2.5:gait);
  const braking=horseSpeed*target<0||Math.abs(target)<Math.abs(horseSpeed);
- const delta=(braking?12:5.5)*dt;
+ const delta=(braking?15:boosting?9:5.5)*dt;
  horseSpeed+=T.MathUtils.clamp(target-horseSpeed,-delta,delta);
  heading+=T.MathUtils.clamp(turn,-1,1)*dt*T.MathUtils.lerp(2.45,1.05,Math.min(1,Math.abs(horseSpeed)/14));
  const step=horseSpeed*dt;
@@ -631,11 +639,12 @@ if(parked){
   camera.lookAt(lateral-sn*4,camera.position.y-.24,z-cs*4);
 }else{rider.visible=true;followRider(dt,z,ground)}
 if(state==='free'){
+  boostButton.textContent=parked?'Sprint':'Gallop';
   mountButton.textContent=parked?'Mount (E)':'Dismount (E)';
   mountButton.disabled=!!(jump||vy||(parked&&!nearHorse()));
 }
 sky.position.copy(camera.position);moon.position.set(-62,42,z-162);
 sun.position.set(lateral-15,ground+19,z+5);sun.target.position.set(lateral,ground,z);spirit.position.y=height(0,-80)+.15*Math.sin(now*.003);
-document.querySelector('#score').textContent=(state==='free'?(parked?'On foot':Math.abs(horseSpeed)<.2?'Halt':horseSpeed<0?'Back':horseSpeed<4?'Walk':horseSpeed<9?'Trot':'Gallop')+' · ':'')+Math.floor(dist)+' m';renderer.render(scene,camera);requestAnimationFrame(frame)}requestAnimationFrame(frame)
+document.querySelector('#score').textContent=(state==='free'?(parked?(horseSpeed>3.6?'Running':'On foot'):Math.abs(horseSpeed)<.2?'Halt':horseSpeed<0?'Back':horseSpeed<4?'Walk':horseSpeed<9?'Trot':horseSpeed<15?'Gallop':'Full gallop')+' · ':'')+Math.floor(dist)+' m';renderer.render(scene,camera);requestAnimationFrame(frame)}requestAnimationFrame(frame)
 }catch(error){msg.textContent='The 3D scene could not load. Check your connection and WebGL support.';go.textContent='Try again';go.disabled=false;go.onclick=()=>location.reload();console.error(error)}
 </script></html>
