@@ -1,6 +1,6 @@
 <!doctype html><html lang="fr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Rihla · Traversée 3D</title>
-<style>*{box-sizing:border-box}body{margin:0;background:#222039;color:#fff0cf;font:16px system-ui}canvas{width:100vw;height:100dvh;display:block;touch-action:none}header,footer,#menu{position:absolute}header{inset:22px 5% auto;display:flex;justify-content:space-between;font:700 16px monospace;text-shadow:0 2px 5px #111}footer{bottom:14px;width:100%;text-align:center;text-shadow:0 1px 4px black;pointer-events:none}#menu{left:50%;top:32%;transform:translate(-50%,-50%);text-align:center;width:min(90%,480px);text-shadow:0 2px 8px #251c29}h1{font:italic 58px Georgia;margin:4px}button{background:#f1c78c;border:0;border-radius:3px;padding:12px 24px;font:700 16px system-ui;color:#302436}a{color:inherit}</style>
-<canvas aria-label="Désert de Rihla en 3D"></canvas><header><a href="/">Rihla · 2D</a><span id="score">0 m</span></header><section id="menu"><small>رحلة</small><h1>Rihla 3D</h1><p id="msg">Une traversée de vingt secondes.</p><button id="go" disabled>Chargement…</button></section><footer>← → ou glisser pour esquiver · Espace ou toucher pour sauter</footer>
+<style>*{box-sizing:border-box}body{margin:0;background:#222039;color:#fff0cf;font:16px system-ui}canvas{width:100vw;height:100dvh;display:block;touch-action:none}header,footer,#menu{position:absolute}header{inset:22px 5% auto;display:flex;justify-content:space-between;font:700 16px monospace;text-shadow:0 2px 5px #111}footer{bottom:14px;width:100%;text-align:center;text-shadow:0 1px 4px black;pointer-events:none}#menu{left:50%;top:32%;transform:translate(-50%,-50%);text-align:center;width:min(90%,480px);text-shadow:0 2px 8px #251c29}h1{font:italic 58px Georgia;margin:4px}button{background:#f1c78c;border:0;border-radius:3px;padding:12px 24px;font:700 16px system-ui;color:#302436}a{color:inherit}button{margin:3px}#pad{position:absolute;bottom:32px;left:20px;width:104px;height:104px;border-radius:50%;background:#2d233b88;border:2px solid #f9dfa0aa;touch-action:none}#stick{display:block;margin:32px;width:36px;height:36px;border-radius:50%;background:#ffe3ab}#map{position:absolute;right:14px;top:59px;width:90px;height:108px;border:1px solid #ebc799}#exit{position:absolute;right:12px;bottom:25px;font-size:14px}#freeUI[hidden]{display:none}</style>
+<canvas aria-label="Désert de Rihla en 3D"></canvas><header><a href="/">Rihla · 2D</a><span id="score">0 m</span></header><section id="menu"><small>رحلة</small><h1>Rihla 3D</h1><p id="msg">Une traversée de vingt secondes.</p><button id="go" disabled>Chargement…</button><button id="explore" disabled>Exploration libre</button></section><div id="freeUI" hidden><canvas id="map" width="120" height="144" aria-label="Carte des pyramides et position du cavalier"></canvas><div id="pad" aria-label="Joystick de déplacement"><span id="stick"></span></div><button id="exit">Menu</button></div><footer>← → ou glisser pour esquiver · Espace ou toucher pour sauter</footer>
 <script type="module">
 const msg=document.querySelector('#msg'),go=document.querySelector('#go'),menu=document.querySelector('#menu'),canvas=document.querySelector('canvas');
 try {
@@ -108,19 +108,56 @@ sculpt(spirit,0x211e26,[[.15,.63,.44,0],[.38,.58,.37,0],[1,.48,.29,0],[1.52,.43,
 oval(spirit,0x211e25,0,2.06,0,.32,.43,.29);oval(spirit,0x0e0d12,0,2.04,.211,.237,.26,.118);
 for(const x of [-.105,.105]){const eye=oval(spirit,0xff6841,x,2.09,.324,.047,.014,.014);eye.material.emissive.setHex(0xff4522)}
 let state='ready',dist=0,lane=0,lateral=0,jump=0,vy=0,last=performance.now();
-function start(){dist=lane=lateral=jump=vy=0;state='run';menu.hidden=true}
+const freeUI=document.querySelector('#freeUI'),pad=document.querySelector('#pad'),stick=document.querySelector('#stick');
+const map=document.querySelector('#map').getContext('2d'),keys=new Set();
+let heading=0,worldZ=0,stickX=0,stickY=0,scrollX=0,scrollY=0,drag=null;
+function clearInput(){keys.clear();stickX=stickY=scrollX=scrollY=0;drag=null;stick.style.transform='none'}
+addEventListener('blur',clearInput);
+function returnMenu(){state='ready';freeUI.hidden=true;menu.hidden=false;clearInput();dist=lateral=worldZ=heading=jump=vy=0;msg.textContent='Choisis ta traversée.';document.querySelector('footer').textContent='← → ou glisser pour esquiver · Espace ou toucher pour sauter'}
+document.querySelector('#exit').onclick=returnMenu;
+const explore=document.querySelector('#explore');explore.disabled=false;
+explore.onclick=()=>{returnMenu();state='free';freeUI.hidden=false;menu.hidden=true;document.querySelector('footer').textContent='Flèches / ZQSD · Pavé ou joystick pour diriger'};
+function joystick(e){
+ const box=pad.getBoundingClientRect(),x=(e.clientX-box.left-box.width/2)/36,y=(e.clientY-box.top-box.height/2)/36;
+ const length=Math.max(1,Math.hypot(x,y));stickX=x/length;stickY=-y/length;stick.style.transform='translate('+stickX*30+'px,'+(-stickY*30)+'px)';
+}
+pad.onpointerdown=e=>{pad.setPointerCapture(e.pointerId);joystick(e)};
+pad.onpointermove=e=>{if(pad.hasPointerCapture(e.pointerId))joystick(e)};
+pad.onlostpointercapture=()=>{stickX=stickY=0;stick.style.transform='none'};
+canvas.addEventListener('wheel',e=>{if(state!=='free')return;e.preventDefault();scrollX=Math.max(-1,Math.min(1,scrollX+e.deltaX*.035));scrollY=Math.max(-1,Math.min(1,scrollY-e.deltaY*.035))},{passive:false});
+addEventListener('keydown',e=>{if(state!=='free')return;const k=e.key.toLowerCase();if(['arrowup','arrowdown','arrowleft','arrowright','z','q','s','d','w','a',' ','escape'].includes(k)){e.preventDefault();keys.add(k);if(k==='escape')returnMenu();if(k===' '&&!jump&&!vy)vy=5.4}});
+addEventListener('keyup',e=>keys.delete(e.key.toLowerCase()));
+function paintMap(){
+ map.fillStyle='#493c45';map.fillRect(0,0,120,144);map.fillStyle='#edc388';
+ for(const [x,z] of [[-34,-75],[28,-132],[49,-145]]){const px=(x+150)*.4,py=(z+275)*.4;map.beginPath();map.moveTo(px,py-4);map.lineTo(px-4,py+3);map.lineTo(px+4,py+3);map.fill()}
+ map.save();map.translate((lateral+150)*.4,(worldZ+275)*.4);map.rotate(-heading);map.fillStyle='#a8f2df';map.beginPath();map.moveTo(0,-6);map.lineTo(-4,4);map.lineTo(4,4);map.fill();map.restore();
+}
+function start(){heading=0;dist=lane=lateral=jump=vy=0;state='run';menu.hidden=true}
 function end(message){state='done';msg.textContent=message;go.textContent='Rejouer';menu.hidden=false}
 function leap(){if(state==='run'&&!jump&&!vy)vy=5.4}
 function move(dir){if(state==='run')lane=Math.max(-1,Math.min(1,lane+dir))}
 go.disabled=false;go.textContent='Partir';go.onclick=start;
 addEventListener('keydown',e=>{if(state!=='run'||!['ArrowLeft','ArrowRight','ArrowUp','Space'].includes(e.code))return;e.preventDefault();if(e.repeat)return;if(e.code==='ArrowLeft')move(-1);else if(e.code==='ArrowRight')move(1);else leap()});
 let touch=null;canvas.onpointerdown=e=>{touch=e.clientX;canvas.setPointerCapture(e.pointerId)};canvas.onpointerup=e=>{if(touch===null)return;const dx=e.clientX-touch;touch=null;if(Math.abs(dx)>22)move(Math.sign(dx));else leap()};canvas.onpointercancel=()=>touch=null;
-function frame(now){const dt=Math.min(.04,(now-last)/1000);last=now;if(state==='run'){dist+=8*dt;lateral+=(lane*1.75-lateral)*(1-Math.exp(-12*dt));jump=Math.max(0,jump+vy*dt);vy=jump>0?vy-13*dt:0;if(Math.abs(dist-80)<.65&&Math.abs(lateral)<.75)end('Le djinn a barré le passage. Esquive sur le côté.');else if(dist>=160)end('Tu as franchi les dunes.')}
-const z=-dist,ground=height(lateral,z),phase=dist*2.3;root.position.set(lateral,ground+jump,z);root.rotation.x=Math.atan((height(lateral,z-1)-height(lateral,z+1))/2);
+function frame(now){const dt=Math.min(.04,(now-last)/1000);last=now;if(state==='free'){
+ const held=(...names)=>Number(names.some(k=>keys.has(k)));
+ const turn=held('arrowleft','q','a')-held('arrowright','d')-stickX-scrollX;
+ const throttle=held('arrowup','z','w')-held('arrowdown','s')+stickY+scrollY;
+ heading+=Math.max(-1,Math.min(1,turn))*dt*2.2;
+ const step=Math.max(-1,Math.min(1,throttle))*dt*10;
+ const x=Math.max(-145,Math.min(145,lateral-Math.sin(heading)*step));
+ const nextZ=Math.max(-270,Math.min(80,worldZ-Math.cos(heading)*step));
+ dist+=Math.hypot(x-lateral,nextZ-worldZ);lateral=x;worldZ=nextZ;
+ scrollX*=Math.exp(-5*dt);scrollY*=Math.exp(-5*dt);jump=Math.max(0,jump+vy*dt);vy=jump>0?vy-13*dt:0;paintMap();
+}
+if(state==='run'){dist+=8*dt;lateral+=(lane*1.75-lateral)*(1-Math.exp(-12*dt));jump=Math.max(0,jump+vy*dt);vy=jump>0?vy-13*dt:0;if(Math.abs(dist-80)<.65&&Math.abs(lateral)<.75)end('Le djinn a barré le passage. Esquive sur le côté.');else if(dist>=160)end('Tu as franchi les dunes.')}
+const z=state==='free'?worldZ:-dist,ground=height(lateral,z),phase=dist*2.3;root.position.set(lateral,ground+jump,z);const sn=Math.sin(heading),cs=Math.cos(heading);
+root.rotation.order='YXZ';root.rotation.y=heading;root.rotation.x=Math.atan((height(lateral-sn,z-cs)-height(lateral+sn,z+cs))/2);
 body.position.y=.055*Math.sin(phase*2);rider.rotation.x=.07*Math.sin(phase);tail.rotation.z=.12*Math.sin(phase*.5);neck.rotation.x=.016*Math.sin(phase*2);
 for(const leg of legs){const t=phase+(leg.x>0?.75:0)+(leg.z>0?2.8:0);leg.hip.rotation.x=jump?.35:.46*Math.sin(t);leg.knee.rotation.x=jump?-.9:-.46*Math.max(0,Math.cos(t))}
-camera.position.set(lateral*.58+1.1,Math.max(ground+3.75,height(lateral,z+5)+2.6),z+5.3);camera.lookAt(lateral*.55,ground+1.7,z-3.5);sky.position.copy(camera.position);moon.position.set(-62,42,z-162);
-sun.position.set(-15,ground+19,z+5);sun.target.position.set(lateral,ground,z);spirit.position.y=height(0,-80)+.15*Math.sin(now*.003);
+camera.position.set(lateral*.58+1.1,Math.max(ground+3.75,height(lateral,z+5)+2.6),z+5.3);camera.lookAt(lateral*.55,ground+1.7,z-3.5);if(state==='free'){const cx=lateral+sn*5.6+cs*.6,cz=z+cs*5.6-sn*.6;camera.position.set(cx,Math.max(ground+3.8,height(cx,cz)+1.6),cz);camera.lookAt(lateral-sn*2,ground+1.7,z-cs*2)}
+sky.position.copy(camera.position);moon.position.set(-62,42,z-162);
+sun.position.set(lateral-15,ground+19,z+5);sun.target.position.set(lateral,ground,z);spirit.position.y=height(0,-80)+.15*Math.sin(now*.003);
 document.querySelector('#score').textContent=Math.floor(dist)+' m';renderer.render(scene,camera);requestAnimationFrame(frame)}requestAnimationFrame(frame)
 }catch(error){msg.textContent='Chargement 3D impossible. Vérifie la connexion et la prise en charge de WebGL.';go.textContent='Réessayer';go.disabled=false;go.onclick=()=>location.reload();console.error(error)}
 </script></html>
