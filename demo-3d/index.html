@@ -163,11 +163,24 @@ function buildMedina() {
   const cube=new T.BoxGeometry(), dome=new T.SphereGeometry(1,20,10,0,Math.PI*2,0,Math.PI/2);
   const column=new T.CylinderGeometry(.5,.55,1,12), finial=new T.ConeGeometry(.5,1,8);
   const batches=new Map(), bounds=[];
+  // Static camera geometry is indexed in courtyard-sized cells, independent of draw batches.
+  const cameraCells=new Map(), cameraMaterial=new T.MeshBasicMaterial({side:T.DoubleSide});
   function add(shape,x,y,z,w,h,d,color,rotation=0) {
     if(!batches.has(shape)) batches.set(shape,[]);
     const pose=new T.Object3D();
     pose.position.set(x,y,z); pose.scale.set(w,h,d); pose.rotation.z=rotation; pose.updateMatrix();
     batches.get(shape).push([pose.matrix,color]);
+    if(Math.max(w,h,d)<1 && shape.type!=='ExtrudeGeometry')return;
+    const obstacle=new T.Mesh(shape,cameraMaterial);
+    obstacle.matrixWorld.copy(pose.matrix);
+    if(!shape.boundingBox)shape.computeBoundingBox();
+    const box=shape.boundingBox.clone().applyMatrix4(pose.matrix);
+    for(let ix=Math.floor(box.min.x/12);ix<=Math.floor(box.max.x/12);ix++)
+      for(let iz=Math.floor(box.min.z/12);iz<=Math.floor(box.max.z/12);iz++){
+        const cell=ix+','+iz;
+        if(!cameraCells.has(cell))cameraCells.set(cell,[]);
+        cameraCells.get(cell).push(obstacle);
+      }
   }
   function surface(w,h,draw) {
     const sheet=document.createElement('canvas'); sheet.width=w; sheet.height=h;
@@ -381,6 +394,14 @@ function buildMedina() {
     batch.castShadow=batch.receiveShadow=true;scene.add(batch);
   }
   return {
+    cameraObstacles(x,z,reach,nearby){
+      nearby.clear();
+      for(let ix=Math.floor((x-reach)/12);ix<=Math.floor((x+reach)/12);ix++)
+        for(let iz=Math.floor((z-reach)/12);iz<=Math.floor((z+reach)/12);iz++){
+          const cell=cameraCells.get(ix+','+iz);
+          if(cell)for(const object of cell)nearby.add(object);
+        }
+    },
     blocked(x,z){return bounds.some(([cx,cz,w,d])=>Math.abs(x-cx)<w&&Math.abs(z-cz)<d)},
     animate(t){townsfolk.forEach(({p,torso,arm,feet,x,z,merchant},i)=>{
       const phase=t*.45+i;
@@ -481,6 +502,46 @@ function move(dir){if(state==='run')lane=Math.max(-1,Math.min(1,lane+dir))}
 go.disabled=false;go.textContent='Start ride';go.onclick=start;
 addEventListener('keydown',e=>{if(state!=='run'||!['ArrowLeft','ArrowRight','ArrowUp','Space'].includes(e.code))return;e.preventDefault();if(e.repeat)return;if(e.code==='ArrowLeft')move(-1);else if(e.code==='ArrowRight')move(1);else leap()});
 let touch=null;canvas.onpointerdown=e=>{touch=e.clientX;canvas.setPointerCapture(e.pointerId)};canvas.onpointerup=e=>{if(touch===null)return;const dx=e.clientX-touch;touch=null;if(Math.abs(dx)>22)move(Math.sign(dx));else leap()};canvas.onpointercancel=()=>touch=null;
+const boomRay=new T.Raycaster(), pivot=new T.Vector3(), desired=new T.Vector3(), direction=new T.Vector3();
+const nearby=new Set(), intersections=[];
+let cameraHeading=0, boomLength=8, lastCameraState='';
+function followRider(dt,z,ground){
+  const free=state==='free', yaw=free?heading:0;
+  const reset=state!==lastCameraState;
+  lastCameraState=state;
+  const yawError=Math.atan2(Math.sin(yaw-cameraHeading),Math.cos(yaw-cameraHeading));
+  cameraHeading=reset?yaw:cameraHeading+yawError*(1-Math.exp(-8*dt));
+  const sn=Math.sin(cameraHeading), cs=Math.cos(cameraHeading);
+  const portrait=1-T.MathUtils.smoothstep(camera.aspect,.6,1.45);
+  const depth=6.7+portrait*1.35;
+  const lift=3.95+portrait*.85;
+  const vault=free?(1-T.MathUtils.smoothstep(Math.abs(lateral),3.3,4.2))*T.MathUtils.smoothstep(-z,159,165)*(1-T.MathUtils.smoothstep(-z,169,173)):0;
+  pivot.set(lateral,ground+jump+3.23,z);
+  desired.set(lateral+sn*depth+cs*.45,ground+jump*.55+lift,z+cs*depth-sn*.45);
+  desired.y=Math.max(desired.y,height(desired.x,desired.z)+1.35);
+  desired.lerp(pivot,vault);
+  direction.subVectors(desired,pivot);
+  let limit=direction.length();
+  if(limit>.01){
+    direction.divideScalar(limit);
+    medina.cameraObstacles(lateral,z,limit+1,nearby);
+    boomRay.far=limit+.3;
+    for(const offset of [-.16,0,.16]){
+      boomRay.set(pivot,direction);
+      boomRay.ray.origin.x+=cs*offset; boomRay.ray.origin.z-=sn*offset;
+      for(const obstacle of nearby){
+        intersections.length=0;
+        boomRay.intersectObject(obstacle,false,intersections);
+        if(intersections.length)limit=Math.min(limit,Math.max(0,intersections[0].distance-.28));
+      }
+    }
+  }
+  boomLength=reset||limit<boomLength?limit:boomLength+(limit-boomLength)*(1-Math.exp(-4*dt));
+  camera.position.copy(pivot).addScaledVector(direction,boomLength);
+  const close=1-T.MathUtils.smoothstep(boomLength,.45,2.2);
+  root.visible=boomLength>.82;
+  camera.lookAt(lateral-sn*3.5,ground+jump*.65+1.65+1.63*close,z-cs*3.5);
+}
 function frame(now){animateCamp(now*.001);medina.animate(now*.001);const dt=Math.min(.04,(now-last)/1000);last=now;if(state==='free'){
  const held=(...names)=>Number(names.some(k=>keys.has(k)));
  const turn=held('arrowleft','q','a')-held('arrowright','d')-stickX-scrollX;
@@ -497,16 +558,9 @@ const z=state==='free'?worldZ:-dist,ground=height(lateral,z),phase=dist*2.3;root
 root.rotation.order='YXZ';root.rotation.y=heading;root.rotation.x=Math.atan((height(lateral-sn,z-cs)-height(lateral+sn,z+cs))/2);
 body.position.y=.055*Math.sin(phase*2);rider.rotation.x=.07*Math.sin(phase);tail.rotation.z=.12*Math.sin(phase*.5);neck.rotation.x=.016*Math.sin(phase*2);
 for(const leg of legs){const t=phase+(leg.x>0?.75:0)+(leg.z>0?2.8:0);leg.hip.rotation.x=jump?.35:.46*Math.sin(t);leg.knee.rotation.x=jump?-.9:-.46*Math.max(0,Math.cos(t))}
-camera.position.set(lateral*.58+1.1,Math.max(ground+3.75,height(lateral,z+5)+2.6),z+5.3);camera.lookAt(lateral*.55,ground+1.7,z-3.5);if(state==='free'){const cx=lateral+sn*5.6+cs*.6,cz=z+cs*5.6-sn*.6;camera.position.set(cx,Math.max(ground+3.8,height(cx,cz)+1.6),cz);camera.lookAt(lateral-sn*2,ground+1.7,z-cs*2)}
+followRider(dt,z,ground);
 sky.position.copy(camera.position);moon.position.set(-62,42,z-162);
 sun.position.set(lateral-15,ground+19,z+5);sun.target.position.set(lateral,ground,z);spirit.position.y=height(0,-80)+.15*Math.sin(now*.003);
-// Bring the camera to saddle height under the vault so turning cannot put it inside a pier.
-if(state==='free' && Math.abs(lateral)<4.15 && z<-160 && z>-170){
-  const blend=T.MathUtils.smoothstep(-z,160,164);
-  camera.position.lerp(new T.Vector3(lateral-sn*.48,ground+jump+3.25,z-cs*.48),blend);
-  camera.lookAt(lateral-sn*3,ground+jump+1.7+1.8*blend,z-cs*3);
-  root.visible=blend<.98;
-}else root.visible=true;
 document.querySelector('#score').textContent=Math.floor(dist)+' m';renderer.render(scene,camera);requestAnimationFrame(frame)}requestAnimationFrame(frame)
 }catch(error){msg.textContent='The 3D scene could not load. Check your connection and WebGL support.';go.textContent='Try again';go.disabled=false;go.onclick=()=>location.reload();console.error(error)}
 </script></html>
