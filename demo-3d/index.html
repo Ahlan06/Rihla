@@ -32,12 +32,32 @@ function mesh(parent,geo,color,x,y,z){const m=new T.Mesh(geo,new T.MeshStandardM
 m.position.set(x,y,z);m.castShadow=m.receiveShadow=true;parent.add(m);return m}
 const sphere=new T.SphereGeometry(1,18,14);
 function oval(p,c,x,y,z,a,b,d){const m=mesh(p,sphere,c,x,y,z);m.scale.set(a,b,d);return m}
-function height(x,z){const edge=Math.max(Math.abs(x)-38,-z-182,z+84,0);const blend=Math.min(1,edge/12);return blend*blend*(3-2*blend)*( 2.6*Math.sin(z*.065+.48*Math.sin(x*.09))+1.1*Math.sin(z*.13+x*.07)+2.2*Math.sin(x*.13+z*.025))}
+const ridgeRoute=new T.CatmullRomCurve3([[22,-148],[33,-148],[41,-144],[47,-133],[49,-114],[48,-94],[44,-76],[37,-61],[26,-50],[20,-39],[12,-33]].map(([x,z])=>new T.Vector3(x,0,z)));
+function height(x,z){const ridge=3.8*Math.exp(-((x-48)**2)/86-((z+105)**2)/880);const edge=Math.max(Math.abs(x)-38,-z-182,z+84,0);const blend=Math.min(1,edge/12);return ridge+blend*blend*(3-2*blend)*( 2.6*Math.sin(z*.065+.48*Math.sin(x*.09))+1.1*Math.sin(z*.13+x*.07)+2.2*Math.sin(x*.13+z*.025))}
 const land=new T.PlaneGeometry(300,360,180,240);land.rotateX(-Math.PI/2);land.translate(0,0,-95);
 const pos=land.attributes.position,colors=[];
 for(let i=0;i<pos.count;i++){const x=pos.getX(i),z=pos.getZ(i);pos.setY(i,height(x,z));const c=new T.Color().setRGB(.54,.315,.195).multiplyScalar(.96+.04*Math.sin(x*7+z*2)+.025*Math.cos(z*9));colors.push(c.r,c.g,c.b)}
 land.setAttribute('color',new T.Float32BufferAttribute(colors,3));land.computeVertexNormals();const dunes=new T.Mesh(land,new T.MeshStandardMaterial({vertexColors:true}));dunes.receiveShadow=true;scene.add(dunes);
 for(const [x,z,r] of [[-34,-75,17],[65,-151,24],[83,-169,14]]){const m=mesh(scene,new T.ConeGeometry(r,r*1.25,4),0xb58665,x,height(x,z)+r*.49,z);m.rotation.y=Math.PI/4}
+// Sample the same ground surface as the horse across the entire trail width.
+const trackVertices=[],trackIndices=[],trackColors=[];
+for(let row=0;row<=180;row++){
+  const t=row/180,p=ridgeRoute.getPointAt(t),v=ridgeRoute.getTangentAt(t);
+  for(let col=0;col<=8;col++){
+    const offset=(col-4)*.58;
+    const x=p.x-v.z*offset,z=p.z+v.x*offset;
+    trackVertices.push(x,height(x,z)+.055,z);
+    const shade=[1,.95,.81,.89,.94,.89,.81,.95,1][col]*(.98+.02*Math.sin(row*1.4));
+    trackColors.push(.50*shade,.31*shade,.205*shade);
+    if(row&&col){const n=row*9+col;trackIndices.push(n-10,n-9,n,n-10,n,n-1)}
+  }
+}
+const trackGeometry=new T.BufferGeometry();
+trackGeometry.setAttribute('position',new T.Float32BufferAttribute(trackVertices,3));
+trackGeometry.setAttribute('color',new T.Float32BufferAttribute(trackColors,3));
+trackGeometry.setIndex(trackIndices);trackGeometry.computeVertexNormals();
+const track=new T.Mesh(trackGeometry,new T.MeshStandardMaterial({vertexColors:true,side:T.DoubleSide}));
+track.receiveShadow=true;scene.add(track);
 const moon=new T.Mesh(sphere,new T.MeshBasicMaterial({color:0xffdfa3}));moon.scale.setScalar(8);scene.add(moon);
 // Cross sections describe the silhouette. Shared rings give continuous normals.
 function sculpt(parent, color, sections, alongBack=false, folds=0) {
@@ -225,6 +245,7 @@ function buildMedina() {
     pave(side*15,-148,16,10);
     pave(side*19,-129.5,8,27);
     for(const z of [-110,-121,-132,-143,-154]){
+      if(side===1&&z===-143)continue;
       const x=side*27,h=z===-132?7:5;
       add(facade,x,h/2,z,7,h,9,side<0?0xe8c3aa:0xe5bb91);
       add(cube,x,h,z,7.5,.35,9.4,0xb78665);
@@ -313,6 +334,10 @@ function buildMedina() {
   archOutline.lineTo(4.1,0);archOutline.lineTo(5.8,0);archOutline.lineTo(5.8,8.8);
   archOutline.lineTo(-5.8,8.8);archOutline.closePath();
   const gate=new T.ExtrudeGeometry(archOutline,{depth:2,bevelEnabled:false,curveSegments:10});
+  const eastGate=gate.clone().rotateY(Math.PI/2);
+  add(eastGate,30,0,-147,1,.81,1,0xbe9574);
+  for(const sign of [-1,1])bounds.push([31,-147+sign*5,1.4,1.3]);
+  pave(26.5,-147,7,7);
   add(gate,0,0,-86,1,1,1,0xc49169);
   for(const side of [-1,1]){
     bounds.push([side*5,-85,1.3,1.45]);
@@ -474,12 +499,13 @@ let state='ready',dist=0,lane=0,lateral=0,jump=0,vy=0,last=performance.now();
 const freeUI=document.querySelector('#freeUI'),pad=document.querySelector('#pad'),stick=document.querySelector('#stick');
 const map=document.querySelector('#map').getContext('2d'),keys=new Set();
 let heading=0,worldZ=0,stickX=0,stickY=0,scrollX=0,scrollY=0,drag=null;
-function clearInput(){keys.clear();stickX=stickY=scrollX=scrollY=0;drag=null;stick.style.transform='none'}
+let horseSpeed=0,stridePhase=0;
+function clearInput(){horseSpeed=0;stridePhase=0;keys.clear();stickX=stickY=scrollX=scrollY=0;drag=null;stick.style.transform='none'}
 addEventListener('blur',clearInput);
 function returnMenu(){state='ready';freeUI.hidden=true;menu.hidden=false;clearInput();dist=lateral=worldZ=heading=jump=vy=0;msg.textContent='Choose your ride.';document.querySelector('footer').textContent='← → or swipe to dodge · Space or tap to jump'}
 document.querySelector('#exit').onclick=returnMenu;
 const explore=document.querySelector('#explore');explore.disabled=false;
-explore.onclick=()=>{returnMenu();state='free';freeUI.hidden=false;menu.hidden=true;document.querySelector('footer').textContent='Use the arrow keys or the on-screen joystick to steer'};
+explore.onclick=()=>{returnMenu();state='free';freeUI.hidden=false;menu.hidden=true;document.querySelector('footer').textContent='Arrows to ride · Alt to walk · Shift to gallop · Push stick farther to go faster'};
 function joystick(e){
  const box=pad.getBoundingClientRect(),x=(e.clientX-box.left-box.width/2)/36,y=(e.clientY-box.top-box.height/2)/36;
  const length=Math.max(1,Math.hypot(x,y));stickX=x/length;stickY=-y/length;stick.style.transform='translate('+stickX*30+'px,'+(-stickY*30)+'px)';
@@ -488,11 +514,13 @@ pad.onpointerdown=e=>{pad.setPointerCapture(e.pointerId);joystick(e)};
 pad.onpointermove=e=>{if(pad.hasPointerCapture(e.pointerId))joystick(e)};
 pad.onlostpointercapture=()=>{stickX=stickY=0;stick.style.transform='none'};
 canvas.addEventListener('wheel',e=>{if(state!=='free')return;e.preventDefault();scrollX=Math.max(-1,Math.min(1,scrollX+e.deltaX*.035));scrollY=Math.max(-1,Math.min(1,scrollY-e.deltaY*.035))},{passive:false});
-addEventListener('keydown',e=>{if(state!=='free')return;const k=e.key.toLowerCase();if(['arrowup','arrowdown','arrowleft','arrowright','z','q','s','d','w','a',' ','escape'].includes(k)){e.preventDefault();keys.add(k);if(k==='escape')returnMenu();if(k===' '&&!jump&&!vy)vy=5.4}});
+addEventListener('keydown',e=>{if(state!=='free')return;const k=e.key.toLowerCase();if(['arrowup','arrowdown','arrowleft','arrowright','z','q','s','d','w','a','alt','shift',' ','escape'].includes(k)){e.preventDefault();keys.add(k);if(k==='escape')returnMenu();if(k===' '&&!jump&&!vy)vy=5.4}});
 addEventListener('keyup',e=>keys.delete(e.key.toLowerCase()));
 function paintMap(){
  map.fillStyle='#493c45';map.fillRect(0,0,120,144);map.fillStyle='#edc388';
  for(const [x,z] of [[-34,-75],[65,-151],[83,-169]]){const px=(x+150)*.4,py=(z+275)*.4;map.beginPath();map.moveTo(px,py-4);map.lineTo(px-4,py+3);map.lineTo(px+4,py+3);map.fill()}
+ map.beginPath();for(let i=0;i<=32;i++){const p=ridgeRoute.getPointAt(i/32);const mx=(p.x+150)*.4,my=(p.z+275)*.4;if(i===0)map.moveTo(mx,my);else map.lineTo(mx,my)}
+ map.strokeStyle='#dcab79';map.lineWidth=1.6;map.stroke();
  map.save();map.translate((lateral+150)*.4,(worldZ+275)*.4);map.rotate(-heading);map.fillStyle='#a8f2df';map.beginPath();map.moveTo(0,-6);map.lineTo(-4,4);map.lineTo(4,4);map.fill();map.restore();
 }
 function start(){heading=0;dist=lane=lateral=jump=vy=0;state='run';menu.hidden=true}
@@ -546,21 +574,29 @@ function frame(now){animateCamp(now*.001);medina.animate(now*.001);const dt=Math
  const held=(...names)=>Number(names.some(k=>keys.has(k)));
  const turn=held('arrowleft','q','a')-held('arrowright','d')-stickX-scrollX;
  const throttle=held('arrowup','z','w')-held('arrowdown','s')+stickY+scrollY;
- heading+=Math.max(-1,Math.min(1,turn))*dt*2.2;
- const step=Math.max(-1,Math.min(1,throttle))*dt*10;
+ const power=Math.min(1,Math.abs(throttle));
+ const keyboard=held('arrowup','z','w','arrowdown','s');
+ const gait=keyboard?(keys.has('alt')?3:keys.has('shift')?14:7):(power<.4?3:power<.76?7:14);
+ const target=power<.07?0:throttle<0?-2.5:gait;
+ const braking=horseSpeed*target<0||Math.abs(target)<Math.abs(horseSpeed);
+ const delta=(braking?12:5.5)*dt;
+ horseSpeed+=T.MathUtils.clamp(target-horseSpeed,-delta,delta);
+ heading+=T.MathUtils.clamp(turn,-1,1)*dt*T.MathUtils.lerp(2.45,1.05,Math.min(1,Math.abs(horseSpeed)/14));
+ const step=horseSpeed*dt;
  const x=Math.max(-145,Math.min(145,lateral-Math.sin(heading)*step));
  const nextZ=Math.max(-270,Math.min(80,worldZ-Math.cos(heading)*step));
- if(!medina.blocked(x,nextZ)){dist+=Math.hypot(x-lateral,nextZ-worldZ);lateral=x;worldZ=nextZ;}
+ if(!medina.blocked(x,nextZ)){dist+=Math.hypot(x-lateral,nextZ-worldZ);lateral=x;worldZ=nextZ;stridePhase+=step*(Math.abs(horseSpeed)>9?1.38:2.2);}else horseSpeed=0;
  scrollX*=Math.exp(-5*dt);scrollY*=Math.exp(-5*dt);jump=Math.max(0,jump+vy*dt);vy=jump>0?vy-13*dt:0;paintMap();
 }
 if(state==='run'){dist+=8*dt;lateral+=(lane*1.75-lateral)*(1-Math.exp(-12*dt));jump=Math.max(0,jump+vy*dt);vy=jump>0?vy-13*dt:0;if(Math.abs(dist-80)<.65&&Math.abs(lateral)<.75)end('The djinn blocked your path. Dodge to either side.');else if(dist>=160)end('You made it across the dunes!')}
-const z=state==='free'?worldZ:-dist,ground=height(lateral,z),phase=dist*2.3;root.position.set(lateral,ground+jump,z);const sn=Math.sin(heading),cs=Math.cos(heading);
+const z=state==='free'?worldZ:-dist,ground=height(lateral,z),phase=state==='free'?stridePhase:dist*2.3;root.position.set(lateral,ground+jump,z);const sn=Math.sin(heading),cs=Math.cos(heading);
 root.rotation.order='YXZ';root.rotation.y=heading;root.rotation.x=Math.atan((height(lateral-sn,z-cs)-height(lateral+sn,z+cs))/2);
-body.position.y=.055*Math.sin(phase*2);rider.rotation.x=.07*Math.sin(phase);tail.rotation.z=.12*Math.sin(phase*.5);neck.rotation.x=.016*Math.sin(phase*2);
-for(const leg of legs){const t=phase+(leg.x>0?.75:0)+(leg.z>0?2.8:0);leg.hip.rotation.x=jump?.35:.46*Math.sin(t);leg.knee.rotation.x=jump?-.9:-.46*Math.max(0,Math.cos(t))}
+const motion=state==='free'?Math.min(1,Math.abs(horseSpeed)/3):1;
+body.position.y=motion*.055*Math.sin(phase*2);rider.rotation.x=.07*Math.sin(phase);tail.rotation.z=.12*Math.sin(phase*.5);neck.rotation.x=.016*Math.sin(phase*2);
+for(const leg of legs){const t=phase+(leg.x>0?.75:0)+(leg.z>0?2.8:0);leg.hip.rotation.x=jump?.35:motion*.46*Math.sin(t);leg.knee.rotation.x=jump?-.9:-motion*.46*Math.max(0,Math.cos(t))}
 followRider(dt,z,ground);
 sky.position.copy(camera.position);moon.position.set(-62,42,z-162);
 sun.position.set(lateral-15,ground+19,z+5);sun.target.position.set(lateral,ground,z);spirit.position.y=height(0,-80)+.15*Math.sin(now*.003);
-document.querySelector('#score').textContent=Math.floor(dist)+' m';renderer.render(scene,camera);requestAnimationFrame(frame)}requestAnimationFrame(frame)
+document.querySelector('#score').textContent=(state==='free'?(Math.abs(horseSpeed)<.2?'Halt':horseSpeed<0?'Back':horseSpeed<4?'Walk':horseSpeed<9?'Trot':'Gallop')+' · ':'')+Math.floor(dist)+' m';renderer.render(scene,camera);requestAnimationFrame(frame)}requestAnimationFrame(frame)
 }catch(error){msg.textContent='The 3D scene could not load. Check your connection and WebGL support.';go.textContent='Try again';go.disabled=false;go.onclick=()=>location.reload();console.error(error)}
 </script></html>
