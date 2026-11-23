@@ -10,6 +10,28 @@ var clips := {}
 var speed := 0.0
 var heading := 0.0
 var arrived := false
+var orbit := 0.0
+var pitch := 0.33
+var look_hold := 0.0
+var reverse_pause := 0.0
+var steer := 0.0
+
+func rotate_view(delta: Vector2):
+	orbit = wrapf(orbit - delta.x, -PI, PI)
+	pitch = clampf(pitch + delta.y, 0.14, 0.85)
+	look_hold = 0.85
+
+func _unhandled_input(event: InputEvent):
+	if event is InputEventMouseMotion and event.button_mask & MOUSE_BUTTON_MASK_LEFT:
+		rotate_view(event.relative * 0.007)
+	elif event is InputEventPanGesture:
+		rotate_view(event.delta * 0.075)
+	elif event is InputEventMouseButton and event.pressed:
+		match event.button_index:
+			MOUSE_BUTTON_WHEEL_LEFT: rotate_view(Vector2(-0.12, 0) * event.factor)
+			MOUSE_BUTTON_WHEEL_RIGHT: rotate_view(Vector2(0.12, 0) * event.factor)
+			MOUSE_BUTTON_WHEEL_UP: rotate_view(Vector2(0, -0.04) * event.factor)
+			MOUSE_BUTTON_WHEEL_DOWN: rotate_view(Vector2(0, 0.04) * event.factor)
 
 func sand(x: float, z: float) -> float:
 	return 2.5 * sin(z * .074 + .5 * sin(x * .11)) + 1.7 * cos(x * .09 + z * .03)
@@ -120,8 +142,21 @@ func _ready():
 func _physics_process(dt: float):
 	var drive := Input.get_axis("ui_down","ui_up")
 	var turn := Input.get_axis("ui_right","ui_left")
-	speed = move_toward(speed,drive*(11 if Input.is_key_pressed(KEY_SHIFT) else 5),dt*6)
-	heading += turn * dt * 1.8
+	var target := drive * (11.0 if Input.is_key_pressed(KEY_SHIFT) else 5.0)
+	if drive < 0:
+		target = -2.0
+		if speed > 0:
+			reverse_pause = 0.2
+			target = 0
+		elif reverse_pause > 0:
+			reverse_pause -= dt
+			target = 0
+	else:
+		reverse_pause = 0
+	speed = move_toward(speed, target, dt * (9.0 if target < speed else 5.5))
+	steer = move_toward(steer, turn, dt * 4)
+	var turn_rate := lerpf(1.8, 0.85, clampf(absf(speed) / 11, 0, 1))
+	heading += steer * signf(speed) * minf(absf(speed),1.0) * turn_rate * dt
 	var forward := Vector3(-sin(heading),0,-cos(heading))
 	var p := mount.position + forward*speed*dt
 	p.x = clampf(p.x,-120,120)
@@ -131,13 +166,21 @@ func _physics_process(dt: float):
 	mount.rotation.y = heading
 	var slope := sand(p.x+forward.x,p.z+forward.z)-p.y
 	mount.rotation.x = atan(slope)
+	mount.rotation.z = -steer * clampf(speed / 11, 0, 1) * .12
 	var gait := "Idle" if abs(speed)<.25 else ("Walk" if abs(speed)<6 else "Gallop")
 	if clips.has(gait) and animator.current_animation != clips[gait]:
 		animator.play(clips[gait],.25)
-	var behind := p-forward*6
-	behind.y = maxf(p.y+3.3,sand(behind.x,behind.z)+2.2)
+	look_hold = maxf(0, look_hold - dt)
+	if look_hold <= 0 and not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+		orbit = lerp_angle(orbit, 0, 1-exp(-dt*1.6))
+		pitch = lerpf(pitch, 0.33, 1-exp(-dt*1.6))
+	var bearing := heading + orbit
+	var arm := Vector3(sin(bearing)*cos(pitch),sin(pitch),cos(bearing)*cos(pitch))
+	var behind := p + Vector3.UP*1.45 + arm*7.6
+	behind.y = maxf(behind.y,sand(behind.x,behind.z)+1.25)
 	camera.position = behind if dt==0 else camera.position.lerp(behind,1-exp(-dt*7))
-	camera.look_at(p+Vector3.UP*1.45+forward*1.8)
+	camera.position.y = maxf(camera.position.y,sand(camera.position.x,camera.position.z)+1.1)
+	camera.look_at(p+Vector3.UP*1.45+forward*.6)
 	var remaining := Vector2(p.x,p.z).distance_to(CAMP)
 	arrived = arrived or remaining < 4
-	info.text = ("Campement atteint · Exploration libre" if arrived else "Rejoins le fanion indigo · %d m" % roundi(remaining)) + "\nFlèches : avancer, reculer et tourner · Maj : galoper"
+	info.text = ("Campement atteint · Exploration libre" if arrived else "Rejoins le fanion indigo · %d m" % roundi(remaining)) + "\nFlèches : avancer, reculer et tourner · Maj : galoper\nCaméra : cliquer-glisser ou balayer le pavé à deux doigts"
