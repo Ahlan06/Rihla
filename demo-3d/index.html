@@ -1171,7 +1171,12 @@ function changeMount(){
   if(parked){
     if(level||traversal||!nearHorse())return;
     if(document.pointerLockElement===canvas)document.exitPointerLock();
-    lateral=parked.x;worldZ=parked.z;heading=parked.heading;parked=null;
+    const dx=lateral-parked.x,dz=worldZ-parked.z;
+    for(const fraction of [.25,.5,.75]){
+      if(medina.blocked(parked.x+dx*fraction,parked.z+dz*fraction))return;
+    }
+    descent={elapsed:0,mounting:true,side:Math.sign(dx*Math.cos(parked.heading)-dz*Math.sin(parked.heading))||1};
+    footVX=footVZ=0;
     document.querySelector('footer').textContent=ridingHelp;
   }else{
     let spot;
@@ -1185,7 +1190,7 @@ function changeMount(){
     footYaw=heading;footVX=footVZ=0;
     document.querySelector('footer').textContent='Move: WASD / ZQSD / stick · Look: click for mouse or swipe · Shift to sprint';
   }
-  clearInput();lastCameraState='';
+  clearInput();
 }
 mountButton.onclick=changeMount;
 addEventListener('keydown',e=>{if((state==='free'||state==='run')&&(e.code==='KeyE'||e.key.toLowerCase()==='e')&&!e.repeat&&!e.metaKey&&!e.ctrlKey&&!e.altKey){e.preventDefault();changeMount()}});
@@ -1403,7 +1408,10 @@ function frame(now){animateCamp(desertTime);medina.animate(now*.001);const dt=Ma
  const held=(...names)=>Number(names.some(k=>keys.has(k)));
  const turn=held('arrowleft','q','a')-held('arrowright','d')-stickX-scrollX;
  const throttle=held('arrowup','z','w')-held('arrowdown','s')+stickY+scrollY;
- if(descent){descent.elapsed+=dt;if(descent.elapsed>=1.05)descent=null}else if(traversal){footVX=footVZ=0;traverse(dt)}else if(parked){
+ if(descent){descent.elapsed+=dt;if(descent.elapsed>=1.05){
+   if(descent.mounting){lateral=parked.x;worldZ=parked.z;heading=parked.heading;parked=null}
+   descent=null;
+ }}else if(traversal){footVX=footVZ=0;traverse(dt)}else if(parked){
    const magnitude=Math.hypot(turn,throttle);
    const speed=(keys.has('shift')||touchBoost)?8:3.4;
    const target=magnitude>.07?speed/Math.max(1,magnitude):0;
@@ -1483,7 +1491,14 @@ if(parked){
   root.visible=true;rider.visible=false;body.position.y=.012*Math.sin(now*.002);body.rotation.x=0;
   tail.rotation.z=.06*Math.sin(now*.002);neck.rotation.x=.012*Math.sin(now*.0015);
   for(const leg of legs){leg.hip.rotation.x=0;leg.knee.rotation.x=0}
-  const progress=descent?Math.min(1,descent.elapsed/1.05):1;
+  const fraction=descent?Math.min(1,descent.elapsed/1.05):1;
+  const progress=descent?.mounting?1-fraction:fraction;
+  if(descent?.mounting){
+    const turn=parked.heading-footYaw;
+    footYaw+=Math.atan2(Math.sin(turn),Math.cos(turn))*(1-Math.exp(-9*dt));
+    const cameraTurn=parked.heading-heading;
+    heading+=Math.atan2(Math.sin(cameraTurn),Math.cos(cameraTurn))*(1-Math.exp(-7*dt));
+  }
   const slide=T.MathUtils.smoothstep(progress,.13,.88), settle=T.MathUtils.smoothstep(progress,.30,.96);
   const wx=T.MathUtils.lerp(parked.x,lateral,slide),wz=T.MathUtils.lerp(parked.z,z,slide);
   const seat=height(parked.x,parked.z)+rider.position.y-.70;
