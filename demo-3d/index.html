@@ -707,19 +707,6 @@ function buildMedina() {
   }
   for(const [x,z] of [[4,-19],[16,-20.8],[31,-22.5],[45,-20.6]])trailMarker(x,z,true);
   for(const [x,z] of [[-3.3,-24],[-3.4,-43],[-3.2,-62],[-3.4,-78]])trailMarker(x,z,false);
-  function wayboard(x,z,yaw,lines){
-    const y=height(x,z);
-    add(column,x,y+1.8,z,.2,3.6,.2,0x64503e);bounds.push([x,z,.46,.46]);
-    const texture=surface(256,96,g=>{
-      g.fillStyle='#403531';g.fillRect(0,0,256,96);g.strokeStyle='#b99567';g.lineWidth=4;g.strokeRect(2,2,252,92);
-      g.textAlign='center';g.font='bold 28px monospace';
-      lines.forEach(([label,color],i)=>{g.fillStyle=color;g.fillText(label,128,i*39+38)});
-    });
-    const board=new T.Mesh(new T.BoxGeometry(3.8,1.43,.16),new T.MeshStandardMaterial({map:texture,emissive:0xffffff,emissiveMap:texture,emissiveIntensity:.32}));
-    board.position.set(x,y+3.25,z);board.rotation.y=yaw;scene.add(board);
-  }
-  wayboard(2.9,-25.4,0,[['↑ MEDINA','#ffd692'],['OASIS →','#85e1cd']]);
-  wayboard(41,-26.9,Math.PI/2,[['↑ CAMP','#ffdaae'],['','#ffdaae']]);
   for(const [shape,items] of batches){
     const material=pixelate(new T.MeshStandardMaterial({map:finishes.get(shape)||null,roughness:.94}));
     const batch=new T.InstancedMesh(shape,material,items.length);
