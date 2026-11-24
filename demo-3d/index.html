@@ -778,8 +778,12 @@ boostButton.onpointerdown=e=>{
 boostButton.onpointerup=boostButton.onpointercancel=boostButton.onlostpointercapture=()=>{touchBoost=false};
 const ridingHelp='Swipe to look · Shift or Gallop to accelerate · Alt to walk';
 function nearHorse(){return parked && Math.hypot(lateral-parked.x,worldZ-parked.z)<2.9}
+let pendingDismount=false;
 function changeMount(){
-  if(state!=='free'||jump>0||vy!==0)return;
+  if(state!=='free'&&state!=='run')return;
+  if(jump>0||vy!==0){pendingDismount=!parked;return}
+  pendingDismount=false;
+  const horseZ=state==='run'?-dist:worldZ;
   if(parked){
     if(!nearHorse())return;
     if(document.pointerLockElement===canvas)document.exitPointerLock();
@@ -788,19 +792,19 @@ function changeMount(){
   }else{
     let spot;
     for(const offset of [Math.PI/2,-Math.PI/2,Math.PI,0]){
-      const x=lateral+1.7*Math.sin(heading+offset),z=worldZ+1.7*Math.cos(heading+offset);
-      if(Math.abs(x)<=145&&z>=-270&&z<=80&&!medina.blocked(x,z)&&!medina.blocked((x+lateral)/2,(z+worldZ)/2)){spot={x,z};break}
+      const x=lateral+1.7*Math.sin(heading+offset),z=horseZ+1.7*Math.cos(heading+offset);
+      if(Math.abs(x)<=145&&z>=-270&&z<=80&&!medina.blocked(x,z)&&!medina.blocked((x+lateral)/2,(z+horseZ)/2)){spot={x,z};break}
     }
     if(!spot){document.querySelector('footer').textContent='Find more room beside your horse to dismount.';return}
-    parked={x:lateral,z:worldZ,heading};lateral=spot.x;worldZ=spot.z;
+    parked={x:lateral,z:horseZ,heading};state='free';freeUI.hidden=false;lateral=spot.x;worldZ=spot.z;
     heading=Math.atan2(lateral-parked.x,worldZ-parked.z);
     document.querySelector('footer').textContent='Move: WASD / ZQSD / stick · Look: click for mouse or swipe · Shift to sprint';
   }
   clearInput();lastCameraState='';
 }
 mountButton.onclick=changeMount;
-addEventListener('keydown',e=>{if(state==='free'&&e.code==='KeyE'&&!e.repeat){e.preventDefault();changeMount()}});
-function returnMenu(){if(document.pointerLockElement===canvas)document.exitPointerLock();parked=null;rider.visible=true;state='ready';freeUI.hidden=true;menu.hidden=false;clearInput();dist=lateral=worldZ=heading=jump=vy=0;msg.textContent='Choose your ride.';document.querySelector('footer').textContent='← → or swipe to dodge · Space or tap to jump'}
+addEventListener('keydown',e=>{if((state==='free'||state==='run')&&(e.code==='KeyE'||e.key.toLowerCase()==='e')&&!e.repeat&&!e.metaKey&&!e.ctrlKey&&!e.altKey){e.preventDefault();changeMount()}});
+function returnMenu(){pendingDismount=false;if(document.pointerLockElement===canvas)document.exitPointerLock();parked=null;rider.visible=true;state='ready';freeUI.hidden=true;menu.hidden=false;clearInput();dist=lateral=worldZ=heading=jump=vy=0;msg.textContent='Choose your ride.';document.querySelector('footer').textContent='← → or swipe to dodge · Space or tap to jump'}
 document.querySelector('#exit').onclick=returnMenu;
 const explore=document.querySelector('#explore');explore.disabled=false;
 explore.onclick=()=>{returnMenu();state='free';freeUI.hidden=false;menu.hidden=true;document.querySelector('footer').textContent='Swipe to look · Shift or Gallop to accelerate · Alt to walk'};
@@ -824,7 +828,7 @@ function paintMap(){
  for(const [x,z,color] of [[51,-14,'#69cdbe'],[78,-55,'#ece0b8'],[109,-89,'#be976d'],[129,-106,'#cbb7ad']]){map.fillStyle=color;map.fillRect((x+150)*.4-1.5,(z+275)*.4-1.5,3,3)}
  map.save();map.translate((lateral+150)*.4,(worldZ+275)*.4);map.rotate(-heading);map.fillStyle='#a8f2df';map.beginPath();map.moveTo(0,-6);map.lineTo(-4,4);map.lineTo(4,4);map.fill();map.restore();
 }
-function start(){heading=0;dist=lane=lateral=jump=vy=0;coinCount=0;for(const c of coinList){c.taken=false;c.g.visible=true}coinsEl.textContent='✦ 0';state='run';menu.hidden=true}
+function start(){pendingDismount=false;heading=0;dist=lane=lateral=jump=vy=0;coinCount=0;for(const c of coinList){c.taken=false;c.g.visible=true}coinsEl.textContent='✦ 0';state='run';menu.hidden=true}
 function end(message){state='done';const total=Math.floor(dist)+coinCount*25;let best=0;try{best=Number(localStorage.getItem('rihla-3d-best')||0)}catch(e){}const record=total>best;if(record){try{localStorage.setItem('rihla-3d-best',String(total))}catch(e){}}msg.innerHTML=message+'<br><br><span style="font-size:1.5em;color:#ffd27a">'+Math.floor(dist)+' m · '+coinCount+' ✦</span><br><strong>Score: '+total+'</strong>'+(record?'<br><span style="color:#7fd0a0">★ New best score!</span>':'');go.textContent='Ride again';menu.hidden=false}
 function leap(){if(state==='run'&&!jump&&!vy)vy=5.4}
 function move(dir){if(state==='run')lane=Math.max(-1,Math.min(1,lane+dir))}
@@ -1038,6 +1042,7 @@ function frame(now){animateCamp(desertTime);medina.animate(now*.001);const dt=Ma
  scrollX*=Math.exp(-5*dt);scrollY*=Math.exp(-5*dt);jump=Math.max(0,jump+vy*dt);vy=jump>0?vy-13*dt:0;paintMap();
 }
 if(state==='run'){dist+=8*dt;lateral+=(lane*1.75-lateral)*(1-Math.exp(-12*dt));jump=Math.max(0,jump+vy*dt);vy=jump>0?vy-13*dt:0;for(const c of coinList){if(c.taken)continue;c.g.rotation.y+=dt*3;c.g.position.y=height(c.x,-c.d)+1.35+.18*Math.sin(dist*3+c.d);if(Math.abs(lateral-c.x)<1.25&&Math.abs(dist-c.d)<1.5){c.taken=true;c.g.visible=false;coinCount++}}coinsEl.textContent='✦ '+coinCount;if(Math.abs(dist-80)<.65&&Math.abs(lateral)<.75)end('The djinn blocked your path. Dodge to either side.');else if(dist>=160)end('You made it across the dunes!')}
+if(pendingDismount&&(state==='free'||state==='run')&&!jump&&!vy)changeMount();
 const z=state==='free'?worldZ:-dist,ground=height(lateral,z),phase=state==='free'?stridePhase:dist*2.3;root.position.set(lateral,ground+jump,z);const sn=Math.sin(heading),cs=Math.cos(heading);
 root.rotation.order='YXZ';root.rotation.y=heading;root.rotation.x=Math.atan((height(lateral-sn,z-cs)-height(lateral+sn,z+cs))/2);
 if(!horseModel){
