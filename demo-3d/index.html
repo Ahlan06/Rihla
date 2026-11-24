@@ -15,7 +15,7 @@ const panel=document.getElementById('sourcePanel'), toggle=document.getElementBy
 function showSource(open){panel.hidden=!open;toggle.setAttribute('aria-expanded',String(open))}
 showSource(!matchMedia('(max-width: 600px), (max-height: 520px)').matches);
 toggle.onclick=()=>showSource(panel.hidden);
-</script><section id="menu"><small>made by Ahlan MIRA</small><h1>Rihla 3D</h1><p id="msg">Ride across the dunes in twenty seconds.</p><button id="go" disabled>Loading…</button><button id="explore" disabled>Free roam</button></section><div id="freeUI" hidden><canvas id="map" width="120" height="144" aria-label="Map showing the pyramids and your position"></canvas><div id="pad" aria-label="Movement joystick"><span id="stick"></span></div><button id="boost" style="position:absolute;right:12px;bottom:139px;font-size:14px;touch-action:none;user-select:none">Gallop</button><button id="mount" style="position:absolute;right:12px;bottom:82px;font-size:14px">Dismount (E)</button><button id="exit">Menu</button></div><footer>← → or swipe to dodge · Space or tap to jump</footer>
+</script><section id="menu"><small>made by Ahlan MIRA</small><h1>Rihla 3D</h1><p id="msg">Ride across the dunes in twenty seconds.</p><button id="go" disabled>Loading…</button><button id="explore" disabled>Free roam</button></section><div id="freeUI" hidden><canvas id="map" width="120" height="144" aria-label="Map showing the pyramids and your position"></canvas><div id="pad" aria-label="Movement joystick"><span id="stick"></span></div><button id="climb" hidden style="position:absolute;right:12px;bottom:192px;font-size:14px">Climb</button><button id="boost" style="position:absolute;right:12px;bottom:139px;font-size:14px;touch-action:none;user-select:none">Gallop</button><button id="mount" style="position:absolute;right:12px;bottom:82px;font-size:14px">Dismount (E)</button><button id="exit">Menu</button></div><footer>← → or swipe to dodge · Space or tap to jump</footer>
 <script type="module">
 const msg=document.querySelector('#msg'),go=document.querySelector('#go'),menu=document.querySelector('#menu'),canvas=document.querySelector('canvas'),coinsEl=document.querySelector('#coins');
 try {
@@ -312,6 +312,7 @@ function createCaravanCamp() {
 const animateCamp=createCaravanCamp();
 
 const waterUniforms={uTime:{value:0},uSky:{value:new T.Color(0x8a6a5a)},uDeep:{value:new T.Color(0x0d3338)}};
+const climbRoute=[];
 function buildMedina() {
   const cube=new T.BoxGeometry(), dome=new T.SphereGeometry(1,20,10,0,Math.PI*2,0,Math.PI/2);
   const column=new T.CylinderGeometry(.5,.55,1,12), finial=new T.ConeGeometry(.5,1,8);
@@ -616,6 +617,21 @@ function buildMedina() {
           add(cube,axis+dx,3.76,mouth-1.36,1.14,.78,.10,0x835c42);
         }
         add(cube,axis,5.15,mouth-.69,4.55,.22,1.84,0x634736);
+        // A working scaffold beside the gallery doubles as a two-stage roof route.
+        const ladderX=x-1.7, deckZ=mouth-1.05, deckY=3.33, roofY=h+.51;
+        add(cube,ladderX,deckY-.12,deckZ,1.65,.24,2.35,0x977252);
+        for(const dx of [-.59,.59]){
+          add(cube,ladderX+dx,deckY/2,deckZ-1.18,.13,deckY,.13,0x70503b);
+          add(cube,ladderX+dx,(deckY+roofY)/2,mouth-.28,.13,roofY-deckY,.13,0x70503b);
+        }
+        for(const [bottom,top,depth] of [[0,deckY,deckZ-1.18],[deckY,roofY,mouth-.28]]){
+          for(let y=bottom+.32;y<top;y+=.38)add(cube,ladderX,y,depth,1.22,.11,.13,0xb18c63);
+        }
+        climbRoute.push(
+          {x:ladderX,z:deckZ-2,y:0},
+          {x:ladderX,z:deckZ,y:deckY,halfX:.62,halfZ:.9},
+          {x:ladderX,z:mouth+.65,y:roofY,halfX:3.25,halfZ:4.2,cx:x,cz:z}
+        );
         const lamp=new T.PointLight(0xffb263,12,7,2);
         lamp.position.set(axis-1.5,2.12,mouth-.53);scene.add(lamp);
         const glass=mesh(scene,new T.OctahedronGeometry(.22),0xffb464,axis-1.5,2.12,mouth-.53);
@@ -955,6 +971,38 @@ boostButton.onpointerdown=e=>{
 boostButton.onpointerup=boostButton.onpointercancel=boostButton.onlostpointercapture=()=>{touchBoost=false};
 const ridingHelp='Swipe to look · Shift or Gallop to accelerate · Alt to walk';
 function nearHorse(){return parked && Math.hypot(lateral-parked.x,worldZ-parked.z)<2.9}
+const climbButton=document.querySelector('#climb');
+let level=0, traversal=null;
+function reachableLevel(){
+  if(!parked||traversal||jump||vy)return -1;
+  const here=climbRoute[level];
+  if(!here||Math.hypot(lateral-here.x,worldZ-here.z)>1.65)return -1;
+  if(level===0)return 1;
+  if(level===2)return 1;
+  return Math.cos(heading)>=0?2:0;
+}
+function climb(){
+  const next=reachableLevel();
+  if(next<0)return false;
+  traversal={next,x:lateral,z:worldZ,y:climbRoute[level].y,t:0};
+  return true;
+}
+climbButton.onclick=climb;
+function traverse(dt){
+  const a=traversal,b=climbRoute[a.next];
+  a.t=Math.min(1,a.t+dt*2.8/Math.abs(b.y-a.y));
+  const t=a.t*a.t*(3-2*a.t);
+  lateral=a.x+(b.x-a.x)*t;worldZ=a.z+(b.z-a.z)*t;
+  horseSpeed=0;
+  if(a.t===1){level=a.next;traversal=null}
+}
+function footHeight(){
+  if(traversal){
+    const t=traversal.t;
+    return traversal.y+(climbRoute[traversal.next].y-traversal.y)*t*t*(3-2*t);
+  }
+  return level?climbRoute[level].y:height(lateral,worldZ);
+}
 let pendingDismount=false;
 function changeMount(){
   if(state!=='free'&&state!=='run')return;
@@ -962,7 +1010,7 @@ function changeMount(){
   pendingDismount=false;
   const horseZ=state==='run'?-dist:worldZ;
   if(parked){
-    if(!nearHorse())return;
+    if(level||traversal||!nearHorse())return;
     if(document.pointerLockElement===canvas)document.exitPointerLock();
     lateral=parked.x;worldZ=parked.z;heading=parked.heading;parked=null;
     document.querySelector('footer').textContent=ridingHelp;
@@ -981,7 +1029,7 @@ function changeMount(){
 }
 mountButton.onclick=changeMount;
 addEventListener('keydown',e=>{if((state==='free'||state==='run')&&(e.code==='KeyE'||e.key.toLowerCase()==='e')&&!e.repeat&&!e.metaKey&&!e.ctrlKey&&!e.altKey){e.preventDefault();changeMount()}});
-function returnMenu(){pendingDismount=false;if(document.pointerLockElement===canvas)document.exitPointerLock();parked=null;rider.visible=true;state='ready';freeUI.hidden=true;menu.hidden=false;clearInput();dist=lateral=worldZ=heading=jump=vy=0;msg.textContent='Choose your ride.';document.querySelector('footer').textContent='← → or swipe to dodge · Space or tap to jump'}
+function returnMenu(){level=0;traversal=null;pendingDismount=false;if(document.pointerLockElement===canvas)document.exitPointerLock();parked=null;rider.visible=true;state='ready';freeUI.hidden=true;menu.hidden=false;clearInput();dist=lateral=worldZ=heading=jump=vy=0;msg.textContent='Choose your ride.';document.querySelector('footer').textContent='← → or swipe to dodge · Space or tap to jump'}
 document.querySelector('#exit').onclick=returnMenu;
 const explore=document.querySelector('#explore');explore.disabled=false;
 explore.onclick=()=>{returnMenu();state='free';freeUI.hidden=false;menu.hidden=true;document.querySelector('footer').textContent='Swipe to look · Shift or Gallop to accelerate · Alt to walk'};
@@ -993,7 +1041,7 @@ pad.onpointerdown=e=>{pad.setPointerCapture(e.pointerId);joystick(e)};
 pad.onpointermove=e=>{if(pad.hasPointerCapture(e.pointerId))joystick(e)};
 pad.onlostpointercapture=()=>{stickX=stickY=0;stick.style.transform='none'};
 canvas.addEventListener('wheel',e=>{if(state!=='free')return;e.preventDefault();scrollX=Math.max(-1,Math.min(1,scrollX+e.deltaX*.035));scrollY=Math.max(-1,Math.min(1,scrollY-e.deltaY*.035))},{passive:false});
-addEventListener('keydown',e=>{if(state!=='free')return;const k=e.key.toLowerCase();if(['arrowup','arrowdown','arrowleft','arrowright','z','q','s','d','w','a','alt','shift',' ','escape'].includes(k)){e.preventDefault();keys.add(k);if(k==='escape')returnMenu();if(k===' '&&!jump&&!vy)vy=5.4}});
+addEventListener('keydown',e=>{if(state!=='free')return;const k=e.key.toLowerCase();if(['arrowup','arrowdown','arrowleft','arrowright','z','q','s','d','w','a','alt','shift',' ','escape'].includes(k)){e.preventDefault();keys.add(k);if(k==='escape')returnMenu();if(k===' '&&!e.repeat&&!traversal&&!jump&&!vy&&!climb())vy=5.4}});
 addEventListener('keyup',e=>keys.delete(e.key.toLowerCase()));
 function paintMap(){
  map.fillStyle='#493c45';map.fillRect(0,0,120,144);
@@ -1194,14 +1242,15 @@ function frame(now){animateCamp(desertTime);medina.animate(now*.001);const dt=Ma
  const held=(...names)=>Number(names.some(k=>keys.has(k)));
  const turn=held('arrowleft','q','a')-held('arrowright','d')-stickX-scrollX;
  const throttle=held('arrowup','z','w')-held('arrowdown','s')+stickY+scrollY;
- if(parked){
+ if(traversal){traverse(dt)}else if(parked){
    const magnitude=Math.hypot(turn,throttle);
    const speed=(keys.has('shift')||touchBoost)?8:3.4;
    const step=magnitude>.07?speed*dt/Math.max(1,magnitude):0;
    const sn=Math.sin(heading),cs=Math.cos(heading);
    const x=T.MathUtils.clamp(lateral-(sn*throttle+cs*turn)*step,-145,145);
    const z=T.MathUtils.clamp(worldZ+(-cs*throttle+sn*turn)*step,-270,80);
-   const passable=(px,pz)=>!medina.blocked(px,pz)&&Math.hypot(px-parked.x,pz-parked.z)>.85;
+   const platform=climbRoute[level];
+   const passable=(px,pz)=>level?Math.abs(px-(platform.cx??platform.x))<=platform.halfX&&Math.abs(pz-(platform.cz??platform.z))<=platform.halfZ:!medina.blocked(px,pz)&&Math.hypot(px-parked.x,pz-parked.z)>.85;
    const oldX=lateral,oldZ=worldZ;
    if(passable(x,worldZ))lateral=x;
    if(passable(lateral,z))worldZ=z;
@@ -1266,13 +1315,16 @@ if(parked){
   root.visible=true;rider.visible=false;body.position.y=.012*Math.sin(now*.002);body.rotation.x=0;
   tail.rotation.z=.06*Math.sin(now*.002);neck.rotation.x=.012*Math.sin(now*.0015);
   for(const leg of legs){leg.hip.rotation.x=0;leg.knee.rotation.x=0}
-  camera.position.set(lateral,ground+jump+1.68+.025*motion*Math.sin(phase*2),z);
+  camera.position.set(lateral,footHeight()+jump+1.68+.025*motion*Math.sin(phase*2),z);
   camera.lookAt(lateral-sn*4,camera.position.y-.24+4*Math.tan(lookPitch),z-cs*4);
 }else{rider.visible=true;followRider(dt,z,ground)}
 if(state==='free'){
+  const nextLevel=reachableLevel();
+  climbButton.hidden=nextLevel<0;
+  if(nextLevel>=0)climbButton.textContent=(nextLevel>level?'Climb':'Descend')+' (Space)';
   boostButton.textContent=parked?'Sprint':'Gallop';
   mountButton.textContent=parked?'Mount (E)':'Dismount (E)';
-  mountButton.disabled=!!(jump||vy||(parked&&!nearHorse()));
+  mountButton.disabled=!!(level||traversal||jump||vy||(parked&&!nearHorse()));
 }
 sky.position.copy(camera.position);moon.position.set(-62,42,z-162);halo.position.copy(moon.position);
 sun.position.set(lateral-15,ground+19,z+5);sun.target.position.set(lateral,ground,z);spirit.position.y=height(0,-80)+.15*Math.sin(now*.003);
