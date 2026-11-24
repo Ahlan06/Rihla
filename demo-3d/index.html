@@ -1078,6 +1078,24 @@ const scarf=new T.CanvasTexture(cloth);scarf.colorSpace=T.SRGBColorSpace;
 const head=oval(rider,0xffffff,0,1.01,-.045,.207,.22,.203);head.material.map=scarf;
 const veil=sculpt(rider,0xffffff,[[.49,.19,.075,.16],[.61,.28,.12,.12],[.76,.245,.145,.09],[.93,.19,.15,.045],[1.03,.18,.15,-.02]],false,.055);veil.material.map=scarf;
 oval(rider,0x221e23,0,1.09,-.045,.202,.036,.201);
+const walker=group(scene), walkingBody=group(walker,0,.85,0);
+walker.visible=false;
+sculpt(walkingBody,0xf3edde,[[-.59,.24,.18,.02],[-.43,.235,.17,.02],[-.12,.20,.15,.01],[.16,.17,.13,0],[.36,.20,.14,0],[.48,.22,.13,0],[.52,.12,.10,0]],false,.04);
+const wrappedHead=group(walkingBody,0,-.08,0);
+wrappedHead.scale.setScalar(.78);
+for(const detail of rider.children.slice(-4))wrappedHead.add(detail.clone());
+const limbs=[-1,1].map(side=>{
+  const hip=group(walkingBody,side*.105,-.12,0),knee=group(hip,0,-.34,0);
+  oval(hip,0xdfd9cb,0,-.17,0,.085,.19,.086);
+  oval(knee,0xcac1af,0,-.15,0,.067,.16,.066);
+  oval(knee,0x554035,0,-.33,-.04,.074,.06,.13);
+  const shoulder=group(walkingBody,side*.197,.43,0),elbow=group(shoulder,0,-.245,0);
+  oval(shoulder,0xeee7da,0,-.11,0,.081,.156,.087);
+  oval(elbow,0xe4ded1,0,-.10,0,.067,.143,.072);
+  oval(elbow,0xa77a58,0,-.235,0,.045,.074,.047);
+  return {hip,knee,shoulder,elbow,side};
+});
+let descent=null,footYaw=0,footVX=0,footVZ=0;
 const spirit=group(scene,0,height(0,-80),-80);
 sculpt(spirit,0x211e26,[[.15,.63,.44,0],[.38,.58,.37,0],[1,.48,.29,0],[1.52,.43,.28,0],[1.78,.46,.28,0],[1.94,.27,.21,0]],false,.085);
 oval(spirit,0x211e25,0,2.06,0,.32,.43,.29);oval(spirit,0x0e0d12,0,2.04,.211,.237,.26,.118);
@@ -1115,7 +1133,7 @@ function nearHorse(){return parked && Math.hypot(lateral-parked.x,worldZ-parked.
 const climbButton=document.querySelector('#climb');
 let level=0, traversal=null;
 function reachableLevel(){
-  if(!parked||traversal||jump||vy)return -1;
+  if(!parked||descent||traversal||jump||vy)return -1;
   const here=climbRoute[level];
   if(!here||Math.hypot(lateral-here.x,worldZ-here.z)>1.65)return -1;
   if(level===0)return 1;
@@ -1146,7 +1164,7 @@ function footHeight(){
 }
 let pendingDismount=false;
 function changeMount(){
-  if(state!=='free'&&state!=='run')return;
+  if(descent||(state!=='free'&&state!=='run'))return;
   if(jump>0||vy!==0){pendingDismount=!parked;return}
   pendingDismount=false;
   const horseZ=state==='run'?-dist:worldZ;
@@ -1163,14 +1181,15 @@ function changeMount(){
     }
     if(!spot){document.querySelector('footer').textContent='Find more room beside your horse to dismount.';return}
     parked={x:lateral,z:horseZ,heading};state='free';freeUI.hidden=false;lateral=spot.x;worldZ=spot.z;
-    heading=Math.atan2(lateral-parked.x,worldZ-parked.z);
+    descent={elapsed:0,side:Math.sign((spot.x-parked.x)*Math.cos(heading)-(spot.z-parked.z)*Math.sin(heading))||1};
+    footYaw=heading;footVX=footVZ=0;
     document.querySelector('footer').textContent='Move: WASD / ZQSD / stick · Look: click for mouse or swipe · Shift to sprint';
   }
   clearInput();lastCameraState='';
 }
 mountButton.onclick=changeMount;
 addEventListener('keydown',e=>{if((state==='free'||state==='run')&&(e.code==='KeyE'||e.key.toLowerCase()==='e')&&!e.repeat&&!e.metaKey&&!e.ctrlKey&&!e.altKey){e.preventDefault();changeMount()}});
-function returnMenu(){level=0;traversal=null;pendingDismount=false;if(document.pointerLockElement===canvas)document.exitPointerLock();parked=null;rider.visible=true;state='ready';freeUI.hidden=true;menu.hidden=false;clearInput();dist=lateral=worldZ=heading=jump=vy=0;msg.textContent='Choose your ride.';document.querySelector('footer').textContent='← → or swipe to dodge · Space or tap to jump'}
+function returnMenu(){descent=null;walker.visible=false;footVX=footVZ=0;level=0;traversal=null;pendingDismount=false;if(document.pointerLockElement===canvas)document.exitPointerLock();parked=null;rider.visible=true;state='ready';freeUI.hidden=true;menu.hidden=false;clearInput();dist=lateral=worldZ=heading=jump=vy=0;msg.textContent='Choose your ride.';document.querySelector('footer').textContent='← → or swipe to dodge · Space or tap to jump'}
 document.querySelector('#exit').onclick=returnMenu;
 const explore=document.querySelector('#explore');explore.disabled=false;
 explore.onclick=()=>{returnMenu();state='free';freeUI.hidden=false;menu.hidden=true;document.querySelector('footer').textContent='Swipe to look · Shift or Gallop to accelerate · Alt to walk'};
@@ -1182,7 +1201,7 @@ pad.onpointerdown=e=>{pad.setPointerCapture(e.pointerId);joystick(e)};
 pad.onpointermove=e=>{if(pad.hasPointerCapture(e.pointerId))joystick(e)};
 pad.onlostpointercapture=()=>{stickX=stickY=0;stick.style.transform='none'};
 canvas.addEventListener('wheel',e=>{if(state!=='free')return;e.preventDefault();scrollX=Math.max(-1,Math.min(1,scrollX+e.deltaX*.035));scrollY=Math.max(-1,Math.min(1,scrollY-e.deltaY*.035))},{passive:false});
-addEventListener('keydown',e=>{if(state!=='free')return;const k=e.key.toLowerCase();if(['arrowup','arrowdown','arrowleft','arrowright','z','q','s','d','w','a','alt','shift',' ','escape'].includes(k)){e.preventDefault();keys.add(k);if(k==='escape')returnMenu();if(k===' '&&!e.repeat&&!traversal&&!jump&&!vy&&!climb())vy=5.4}});
+addEventListener('keydown',e=>{if(state!=='free')return;const k=e.key.toLowerCase();if(['arrowup','arrowdown','arrowleft','arrowright','z','q','s','d','w','a','alt','shift',' ','escape'].includes(k)){e.preventDefault();keys.add(k);if(k==='escape')returnMenu();if(k===' '&&!descent&&!e.repeat&&!traversal&&!jump&&!vy&&!climb())vy=5.4}});
 addEventListener('keyup',e=>keys.delete(e.key.toLowerCase()));
 function paintMap(){
  map.fillStyle='#493c45';map.fillRect(0,0,120,144);
@@ -1236,7 +1255,7 @@ canvas.onpointercancel=canvas.onlostpointercapture=e=>{
 const boomRay=new T.Raycaster(), pivot=new T.Vector3(), desired=new T.Vector3(), direction=new T.Vector3();
 const nearby=new Set(), intersections=[];
 let cameraHeading=0, boomLength=8, lastCameraState='';
-function followRider(dt,z,ground){
+function followRider(dt,z,ground,onFoot=0,x=lateral){
   const free=state==='free', yaw=free?heading+orbitYaw:0;
   const reset=state!==lastCameraState;
   lastCameraState=state;
@@ -1244,18 +1263,18 @@ function followRider(dt,z,ground){
   cameraHeading=reset?yaw:cameraHeading+yawError*(1-Math.exp(-8*dt));
   const sn=Math.sin(cameraHeading), cs=Math.cos(cameraHeading);
   const portrait=1-T.MathUtils.smoothstep(camera.aspect,.6,1.45);
-  const depth=6.7+portrait*1.35;
-  const lift=3.95+portrait*.85;
-  const vault=free?(1-T.MathUtils.smoothstep(Math.abs(lateral),3.3,4.2))*T.MathUtils.smoothstep(-z,159,165)*(1-T.MathUtils.smoothstep(-z,169,173)):0;
-  pivot.set(lateral,ground+jump+3.23,z);
-  desired.set(lateral+sn*depth+cs*.45,ground+jump*.55+lift-depth*Math.sin(lookPitch),z+cs*depth-sn*.45);
+  const depth=6.7+portrait*1.35-onFoot*3.6;
+  const lift=3.95+portrait*.85-onFoot*1.85;
+  const vault=free?(1-T.MathUtils.smoothstep(Math.abs(x),3.3,4.2))*T.MathUtils.smoothstep(-z,159,165)*(1-T.MathUtils.smoothstep(-z,169,173)):0;
+  pivot.set(x,ground+jump+3.23-1.78*onFoot,z);
+  desired.set(x+sn*depth+cs*.45,ground+jump*.55+lift-depth*Math.sin(lookPitch),z+cs*depth-sn*.45);
   desired.y=Math.max(desired.y,height(desired.x,desired.z)+1.35);
   desired.lerp(pivot,vault);
   direction.subVectors(desired,pivot);
   let limit=direction.length();
   if(limit>.01){
     direction.divideScalar(limit);
-    medina.cameraObstacles(lateral,z,limit+1,nearby);
+    medina.cameraObstacles(x,z,limit+1,nearby);
     boomRay.far=limit+.3;
     for(const offset of [-.16,0,.16]){
       boomRay.set(pivot,direction);
@@ -1270,8 +1289,9 @@ function followRider(dt,z,ground){
   boomLength=reset||limit<boomLength?limit:boomLength+(limit-boomLength)*(1-Math.exp(-4*dt));
   camera.position.copy(pivot).addScaledVector(direction,boomLength);
   const close=1-T.MathUtils.smoothstep(boomLength,.45,2.2);
-  root.visible=boomLength>.82;
-  camera.lookAt(lateral-sn*3.5,ground+jump*.65+1.65+1.63*close+3.5*Math.tan(lookPitch),z-cs*3.5);
+  root.visible=!!parked||boomLength>.82;
+  if(parked)walker.visible=boomLength>.55;
+  camera.lookAt(x-sn*3.5,ground+jump*.65+1.65-.39*onFoot+(1.63-1.44*onFoot)*close+3.5*Math.tan(lookPitch),z-cs*3.5);
 }
 // Fixed pools keep footprints and windblown sand bounded during long rides.
 const marks=new T.InstancedMesh(new T.CircleGeometry(1,8),new T.MeshBasicMaterial({color:0x916b52,side:T.DoubleSide}),384);
@@ -1383,19 +1403,26 @@ function frame(now){animateCamp(desertTime);medina.animate(now*.001);const dt=Ma
  const held=(...names)=>Number(names.some(k=>keys.has(k)));
  const turn=held('arrowleft','q','a')-held('arrowright','d')-stickX-scrollX;
  const throttle=held('arrowup','z','w')-held('arrowdown','s')+stickY+scrollY;
- if(traversal){traverse(dt)}else if(parked){
+ if(descent){descent.elapsed+=dt;if(descent.elapsed>=1.05)descent=null}else if(traversal){footVX=footVZ=0;traverse(dt)}else if(parked){
    const magnitude=Math.hypot(turn,throttle);
    const speed=(keys.has('shift')||touchBoost)?8:3.4;
-   const step=magnitude>.07?speed*dt/Math.max(1,magnitude):0;
+   const target=magnitude>.07?speed/Math.max(1,magnitude):0;
    const sn=Math.sin(heading),cs=Math.cos(heading);
-   const x=T.MathUtils.clamp(lateral-(sn*throttle+cs*turn)*step,-145,145);
-   const z=T.MathUtils.clamp(worldZ+(-cs*throttle+sn*turn)*step,-270,80);
+   const blend=1-Math.exp(-(target?10:16)*dt);
+   footVX+=(-(sn*throttle+cs*turn)*target-footVX)*blend;
+   footVZ+=((-cs*throttle+sn*turn)*target-footVZ)*blend;
+   const x=T.MathUtils.clamp(lateral+footVX*dt,-145,145);
+   const z=T.MathUtils.clamp(worldZ+footVZ*dt,-270,80);
    const platform=climbRoute[level];
    const passable=(px,pz)=>level?Math.abs(px-(platform.cx??platform.x))<=platform.halfX&&Math.abs(pz-(platform.cz??platform.z))<=platform.halfZ:!medina.blocked(px,pz)&&Math.hypot(px-parked.x,pz-parked.z)>.85;
    const oldX=lateral,oldZ=worldZ;
    if(passable(x,worldZ))lateral=x;
    if(passable(lateral,z))worldZ=z;
    const walked=Math.hypot(lateral-oldX,worldZ-oldZ);
+   if(walked>.001){
+     const angle=Math.atan2(oldX-lateral,oldZ-worldZ)-footYaw;
+     footYaw+=Math.atan2(Math.sin(angle),Math.cos(angle))*(1-Math.exp(-14*dt));
+   }
    dist+=walked;stridePhase+=walked*2.2;horseSpeed=dt>0?walked/dt:0;
  }else{
  const power=Math.min(1,Math.abs(throttle));
@@ -1456,16 +1483,32 @@ if(parked){
   root.visible=true;rider.visible=false;body.position.y=.012*Math.sin(now*.002);body.rotation.x=0;
   tail.rotation.z=.06*Math.sin(now*.002);neck.rotation.x=.012*Math.sin(now*.0015);
   for(const leg of legs){leg.hip.rotation.x=0;leg.knee.rotation.x=0}
-  camera.position.set(lateral,footHeight()+jump+1.68+.025*motion*Math.sin(phase*2),z);
-  camera.lookAt(lateral-sn*4,camera.position.y-.24+4*Math.tan(lookPitch),z-cs*4);
-}else{rider.visible=true;followRider(dt,z,ground)}
+  const progress=descent?Math.min(1,descent.elapsed/1.05):1;
+  const slide=T.MathUtils.smoothstep(progress,.13,.88), settle=T.MathUtils.smoothstep(progress,.30,.96);
+  const wx=T.MathUtils.lerp(parked.x,lateral,slide),wz=T.MathUtils.lerp(parked.z,z,slide);
+  const seat=height(parked.x,parked.z)+rider.position.y-.70;
+  walker.position.set(wx,T.MathUtils.lerp(seat,footHeight()+jump,settle)+.12*Math.sin(progress*Math.PI),wz);
+  walker.rotation.set(.12*Math.sin(progress*Math.PI),footYaw,(descent?.side||0)*.19*Math.sin(progress*Math.PI));
+  walker.visible=true;
+  const cycle=stridePhase*1.65,weight=descent?0:Math.min(1,gaitSpeed/2);
+  walkingBody.position.y=.85+.028*weight*Math.abs(Math.sin(cycle));
+  for(const limb of limbs){
+    const swing=limb.side*Math.sin(cycle)*weight;
+    const swingOver=descent&&limb.side!==descent.side?Math.sin(Math.PI*Math.min(1,progress/.72)):0;
+    limb.hip.rotation.set(.65*swing+.55*(1-settle),0,limb.side*(.53*(1-slide)+.85*swingOver));
+    limb.knee.rotation.x=-.66*Math.max(0,swing)-.91*(1-settle);
+    limb.shoulder.rotation.x=-.51*swing-.91*(1-slide);
+    limb.elbow.rotation.x=.26+.24*Math.max(0,swing)+.38*(1-slide);
+  }
+  followRider(dt,wz,T.MathUtils.lerp(height(parked.x,parked.z),footHeight(),settle),slide,wx);
+}else{walker.visible=false;rider.visible=true;followRider(dt,z,ground)}
 if(state==='free'){
   const nextLevel=reachableLevel();
   climbButton.hidden=nextLevel<0;
   if(nextLevel>=0)climbButton.textContent=(nextLevel>level?'Climb':'Descend')+' (Space)';
   boostButton.textContent=parked?'Sprint':'Gallop';
   mountButton.textContent=parked?'Mount (E)':'Dismount (E)';
-  mountButton.disabled=!!(level||traversal||jump||vy||(parked&&!nearHorse()));
+  mountButton.disabled=!!(descent||level||traversal||jump||vy||(parked&&!nearHorse()));
 }
 sky.position.copy(camera.position);moon.position.set(-62,42,z-162);halo.position.copy(moon.position);
 sun.position.set(lateral-15,ground+19,z+5);sun.target.position.set(lateral,ground,z);spirit.position.y=height(0,-80)+.15*Math.sin(now*.003);
