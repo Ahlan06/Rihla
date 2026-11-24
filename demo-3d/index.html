@@ -95,6 +95,7 @@ for(let y=0;y<40;y++)for(let x=0;x<40;x++){
 }
 const lunarMap=new T.CanvasTexture(lunarDisc);lunarMap.colorSpace=T.SRGBColorSpace;lunarMap.magFilter=T.NearestFilter;
 const moon=new T.Sprite(new T.SpriteMaterial({map:lunarMap,fog:false,depthWrite:false,toneMapped:false}));moon.scale.set(20,20,1);scene.add(moon);
+const haloCanvas=document.createElement('canvas');haloCanvas.width=haloCanvas.height=128;const haloInk=haloCanvas.getContext('2d');const haloGrad=haloInk.createRadialGradient(64,64,0,64,64,64);haloGrad.addColorStop(0,'rgba(220,200,235,0)');haloGrad.addColorStop(.42,'rgba(220,200,235,0)');haloGrad.addColorStop(.55,'rgba(210,186,222,.3)');haloGrad.addColorStop(.8,'rgba(150,130,170,.07)');haloGrad.addColorStop(1,'rgba(120,100,150,0)');haloInk.fillStyle=haloGrad;haloInk.fillRect(0,0,128,128);const haloTex=new T.CanvasTexture(haloCanvas);haloTex.colorSpace=T.SRGBColorSpace;haloTex.magFilter=T.NearestFilter;const halo=new T.Sprite(new T.SpriteMaterial({map:haloTex,transparent:true,blending:T.AdditiveBlending,depthWrite:false,fog:false,toneMapped:false}));halo.scale.set(46,46,1);halo.renderOrder=-1;scene.add(halo);
 const moonlight=new T.DirectionalLight(0xb7c9ff,0);scene.add(moonlight,moonlight.target);
 
 // Cross sections describe the silhouette. Shared rings give continuous normals.
@@ -292,6 +293,7 @@ function createCaravanCamp() {
 }
 const animateCamp=createCaravanCamp();
 
+const waterUniforms={uTime:{value:0},uSky:{value:new T.Color(0x8a6a5a)},uDeep:{value:new T.Color(0x0d3338)}};
 function buildMedina() {
   const cube=new T.BoxGeometry(), dome=new T.SphereGeometry(1,20,10,0,Math.PI*2,0,Math.PI/2);
   const column=new T.CylinderGeometry(.5,.55,1,12), finial=new T.ConeGeometry(.5,1,8);
@@ -647,7 +649,7 @@ function buildMedina() {
     add(dome,x,15.5,-170,1,1.6,1,0xb38862);
   }
   // The eastern trail skirts the water, passes through a hamlet and enters a ruined gateway.
-  const water=new T.Mesh(new T.CircleGeometry(1,40),pixelate(new T.MeshStandardMaterial({color:0x489d9a,roughness:.32})));
+  const water=new T.Mesh(new T.CircleGeometry(1,40),new T.ShaderMaterial({uniforms:waterUniforms,vertexShader:'varying vec3 vWorld;void main(){vec4 wp=modelMatrix*vec4(position,1.0);vWorld=wp.xyz;gl_Position=projectionMatrix*viewMatrix*wp;}',fragmentShader:'uniform float uTime;uniform vec3 uSky;uniform vec3 uDeep;varying vec3 vWorld;void main(){vec3 vd=normalize(cameraPosition-vWorld);float fres=pow(1.0-clamp(abs(vd.y),0.0,1.0),2.2);float r=sin(vWorld.x*1.5+uTime*1.3)*sin(vWorld.z*2.1-uTime*1.0);vec3 col=mix(uDeep,uSky,fres*0.9);col+=vec3(0.12,0.2,0.26)*r*0.35;float sp=smoothstep(0.9,1.0,r*0.5+0.5);col+=vec3(0.7,0.85,1.0)*sp*0.5;gl_FragColor=vec4(col,1.0);}'}));
   water.rotation.x=-Math.PI/2;water.scale.set(7,4.8,1);water.position.set(51,-.26,-14);scene.add(water);
   for(const [x,z,h] of [[45,-17,6],[55,-10,7],[58,-15,5],[47,-9,5]]){
     const y=height(x,z);add(column,x,y+h/2,z,.43,h,.43,0x846445);bounds.push([x,z,.46,.46]);
@@ -934,6 +936,7 @@ const sparkleGeo=new T.BufferGeometry();sparkleGeo.setAttribute('position',new T
 const sparkles=new T.Points(sparkleGeo,new T.PointsMaterial({map:sparkleTex,vertexColors:true,size:2.6,transparent:true,depthWrite:false,fog:false,alphaTest:.1}));scene.add(sparkles);
 const flareCanvas=document.createElement('canvas');flareCanvas.width=flareCanvas.height=64;const flareInk=flareCanvas.getContext('2d');const flareGrad=flareInk.createRadialGradient(32,32,0,32,32,32);flareGrad.addColorStop(0,'rgba(255,255,255,1)');flareGrad.addColorStop(.16,'rgba(255,250,236,.95)');flareGrad.addColorStop(.42,'rgba(255,240,208,.28)');flareGrad.addColorStop(1,'rgba(255,240,208,0)');flareInk.fillStyle=flareGrad;flareInk.fillRect(0,0,64,64);flareInk.strokeStyle='rgba(255,252,244,.85)';flareInk.lineWidth=2;for(const [dx,dy] of [[1,0],[0,1],[.7,.7],[.7,-.7]]){flareInk.beginPath();flareInk.moveTo(32-dx*30,32-dy*30);flareInk.lineTo(32+dx*30,32+dy*30);flareInk.stroke()}const flareTex=new T.CanvasTexture(flareCanvas);flareTex.colorSpace=T.SRGBColorSpace;flareTex.magFilter=T.NearestFilter;
 const bigPos=[],bigCol=[];for(let i=0;i<18;i++){const y=Math.random(),a=Math.random()*Math.PI*2,r=Math.sqrt(1-y*y);bigPos.push(240*r*Math.sin(a),240*y,240*r*Math.cos(a));const c=Math.random()<.6?[1,.98,.9]:[1,.92,.74];bigCol.push(c[0],c[1],c[2])}const bigGeo=new T.BufferGeometry();bigGeo.setAttribute('position',new T.Float32BufferAttribute(bigPos,3));bigGeo.setAttribute('color',new T.Float32BufferAttribute(bigCol,3));const bigStars=new T.Points(bigGeo,new T.PointsMaterial({map:flareTex,vertexColors:true,size:7,transparent:true,depthWrite:false,fog:false,blending:T.AdditiveBlending}));scene.add(bigStars);
+const cloudCanvas=document.createElement('canvas');cloudCanvas.width=1024;cloudCanvas.height=128;const cloudInk=cloudCanvas.getContext('2d');const cloudCols=['#1a0b2e','#241033','#2e1442','#3a1a52','#160829'];function cloudPuff(x,y,r,col){const g=cloudInk.createRadialGradient(x,y,0,x,y,r);g.addColorStop(0,col);g.addColorStop(1,'rgba(8,3,18,0)');cloudInk.fillStyle=g;cloudInk.beginPath();cloudInk.arc(x,y,r,0,Math.PI*2);cloudInk.fill()}for(let i=0;i<340;i++){const x=Math.random()*1024,y=22+Math.random()*82,r=9+Math.random()*34,col=cloudCols[(Math.random()*cloudCols.length)|0];cloudPuff(x,y,r,col);if(x-r<0)cloudPuff(x+1024,y,r,col);if(x+r>1024)cloudPuff(x-1024,y,r,col)}const cloudTex=new T.CanvasTexture(cloudCanvas);cloudTex.colorSpace=T.SRGBColorSpace;cloudTex.wrapS=T.RepeatWrapping;cloudTex.magFilter=T.NearestFilter;const clouds=new T.Mesh(new T.CylinderGeometry(330,330,90,48,1,true),new T.MeshBasicMaterial({map:cloudTex,transparent:true,side:T.BackSide,depthWrite:false,fog:false,opacity:0}));clouds.renderOrder=-2;scene.add(clouds);
 const meteors=new T.Group();scene.add(meteors);const meteorCanvas=document.createElement('canvas');meteorCanvas.width=meteorCanvas.height=96;const meteorInk=meteorCanvas.getContext('2d');const meteorGrad=meteorInk.createLinearGradient(0,48,96,48);meteorGrad.addColorStop(0,'rgba(255,244,214,0)');meteorGrad.addColorStop(.55,'rgba(255,244,214,.28)');meteorGrad.addColorStop(1,'rgba(255,252,244,1)');meteorInk.fillStyle=meteorGrad;meteorInk.fillRect(0,44,96,8);const meteorTex=new T.CanvasTexture(meteorCanvas);meteorTex.colorSpace=T.SRGBColorSpace;const meteorPool=[];for(let i=0;i<3;i++){const mm=new T.SpriteMaterial({map:meteorTex,transparent:true,blending:T.AdditiveBlending,depthWrite:false,fog:false});const ms=new T.Sprite(mm);ms.visible=false;meteors.add(ms);meteorPool.push({s:ms,active:false,pos:new T.Vector3(),vel:new T.Vector3(),life:0,maxLife:1,next:2+i*3})}
 for(const x of [-4.6,4.6]){
   const lamp=mesh(scene,new T.OctahedronGeometry(.34),0xffab56,x,3.15,-83.8);
@@ -951,6 +954,7 @@ function animateDesert(dt,z){
   moonlight.position.set(lateral-13,root.position.y+13,z-20);moonlight.target.position.set(lateral,root.position.y+1,z);
   sun.intensity=3-night*2.38;sun.position.y-=night*10;sun.position.x-=night*11;
   scene.fog.color.lerpColors(duskFog,nightFog,night);
+  clouds.position.copy(camera.position);clouds.material.opacity=night*.95;halo.material.opacity=night;waterUniforms.uTime.value=t;waterUniforms.uSky.value.setRGB(.75-.69*night,.55-.47*night,.42-.22*night);
   desertStars.position.copy(camera.position);desertStars2.position.copy(camera.position);bigStars.position.copy(camera.position);const starOp=night*(.82+.18*Math.sin(t*1.1+Math.sin(t*.3)));desertStars.material.opacity=starOp;desertStars2.material.opacity=starOp;bigStars.material.opacity=night;sparkles.position.copy(camera.position);sparkles.material.opacity=night;
   meteors.position.copy(camera.position);
   for(const m of meteorPool){if(!m.active){if(t>=m.next&&night>.05){m.active=true;m.life=0;m.maxLife=.7+Math.random()*.5;const az=Math.random()*Math.PI*2,el=.22+Math.random()*.42,r=170+Math.random()*50;m.pos.set(r*Math.cos(el)*Math.sin(az),r*Math.sin(el),r*Math.cos(el)*Math.cos(az));const sp=60+Math.random()*50;m.vel.set(Math.sin(az)*sp,-(8+Math.random()*16),Math.cos(az)*sp);m.s.visible=true;m.s.material.rotation=Math.sin(az)<0?Math.PI:0;m.s.scale.set(7,1.1,1)}else m.s.visible=false;continue}m.life+=dt;if(m.life>=m.maxLife){m.active=false;m.next=t+2+Math.random()*5;m.s.visible=false;continue}m.pos.addScaledVector(m.vel,dt);m.s.position.copy(m.pos);m.s.material.opacity=night*Math.sin(Math.PI*Math.min(1,m.life/m.maxLife))}
@@ -1034,13 +1038,18 @@ if(state==='run'){dist+=8*dt;lateral+=(lane*1.75-lateral)*(1-Math.exp(-12*dt));j
 const z=state==='free'?worldZ:-dist,ground=height(lateral,z),phase=state==='free'?stridePhase:dist*2.3;root.position.set(lateral,ground+jump,z);const sn=Math.sin(heading),cs=Math.cos(heading);
 root.rotation.order='YXZ';root.rotation.y=heading;root.rotation.x=Math.atan((height(lateral-sn,z-cs)-height(lateral+sn,z+cs))/2);
 const motion=state==='free'?Math.min(1,Math.abs(horseSpeed)/3):1;
-body.position.y=motion*.055*Math.sin(phase*2);rider.rotation.x=motion*.07*Math.sin(phase);tail.rotation.z=.12*Math.sin(phase*.5);neck.rotation.x=.016*Math.sin(phase*2);
-for(const leg of legs){const t=phase+(leg.x>0?.75:0)+(leg.z>0?2.8:0);leg.hip.rotation.x=jump?.35:motion*.46*Math.sin(t);leg.knee.rotation.x=jump?-.9:-motion*.46*Math.max(0,Math.cos(t))}
+const gp=phase;
+body.position.y=motion*(.075*Math.sin(gp*2)+.025*Math.sin(gp*3));
+body.rotation.x=motion*.04*Math.sin(gp*2+.4);
+rider.rotation.x=motion*(.085*Math.sin(gp+.35)+.03*Math.sin(gp*2));
+tail.rotation.z=motion*.17*Math.sin(gp*.7+.5)+.04*Math.sin(gp*1.4);
+neck.rotation.x=motion*(.05*Math.sin(gp*2+1.1)-.02);
+for(const leg of legs){const front=leg.z<0,sideOff=leg.x>0?.55:0,t=gp+(front?0:2.35)+sideOff;const swing=Math.sin(t),lift=Math.max(0,Math.cos(t));leg.hip.rotation.x=jump?.35:motion*.6*swing;leg.knee.rotation.x=jump?-.95:-motion*(.55*lift+.08)}
 if(parked){
   root.position.set(parked.x,height(parked.x,parked.z),parked.z);
   root.rotation.y=parked.heading;
   root.rotation.x=Math.atan((height(parked.x-Math.sin(parked.heading),parked.z-Math.cos(parked.heading))-height(parked.x+Math.sin(parked.heading),parked.z+Math.cos(parked.heading)))/2);
-  root.visible=true;rider.visible=false;body.position.y=.012*Math.sin(now*.002);
+  root.visible=true;rider.visible=false;body.position.y=.012*Math.sin(now*.002);body.rotation.x=0;
   tail.rotation.z=.06*Math.sin(now*.002);neck.rotation.x=.012*Math.sin(now*.0015);
   for(const leg of legs){leg.hip.rotation.x=0;leg.knee.rotation.x=0}
   camera.position.set(lateral,ground+jump+1.68+.025*motion*Math.sin(phase*2),z);
@@ -1051,7 +1060,7 @@ if(state==='free'){
   mountButton.textContent=parked?'Mount (E)':'Dismount (E)';
   mountButton.disabled=!!(jump||vy||(parked&&!nearHorse()));
 }
-sky.position.copy(camera.position);moon.position.set(-62,42,z-162);
+sky.position.copy(camera.position);moon.position.set(-62,42,z-162);halo.position.copy(moon.position);
 sun.position.set(lateral-15,ground+19,z+5);sun.target.position.set(lateral,ground,z);spirit.position.y=height(0,-80)+.15*Math.sin(now*.003);
 animateDesert(dt,z);
 document.querySelector('#score').textContent=(state==='free'?(parked?(horseSpeed>3.6?'Running':'On foot'):Math.abs(horseSpeed)<.2?'Halt':horseSpeed<0?'Back':horseSpeed<4?'Walk':horseSpeed<9?'Trot':horseSpeed<15?'Gallop':'Full gallop')+' · ':'')+Math.floor(dist)+' m';renderer.render(scene,camera);requestAnimationFrame(frame)}requestAnimationFrame(frame)
