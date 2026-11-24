@@ -615,6 +615,60 @@ function buildMedina() {
     if(finish)part.material.setValues(finish);
     return part;
   }
+  const facePalette=[
+    ['#a87755','#41332d','#704d40'],['#bd8967','#47352d','#80574a'],
+    ['#8f6148','#322a28','#68483f'],['#ae8064','#60544a','#79584b']
+  ];
+  const faces=facePalette.map(([skin,hair,lip],variant)=>{
+    const map=surface(256,128,g=>{
+      g.fillStyle=skin;g.fillRect(0,0,256,128);
+      function patch(x,y,w,h,color,angle=0){
+        g.fillStyle=color;g.beginPath();g.ellipse(x,y,w,h,angle,0,Math.PI*2);g.fill();
+      }
+      // The front meridian is in the middle of the atlas, with its seam at the nape.
+      for(const sign of [-1,1]){
+        const x=128+sign*18;
+        patch(x,59,12,6,'rgba(60,31,27,.16)',sign*.07);
+        patch(x,61,7,2.7,'#bca397',sign*.05);
+        patch(x,61,2.6,2.6,hair);patch(x,61,1.2,1.9,'#292220');
+        patch(x-.7,60,.75,.65,'#e2cdb1');
+        patch(x,55,8.6,1.6,hair,sign*.1);
+        patch(128+sign*5,78,2.1,1.1,lip);
+        patch(128+sign*27,77,9,6,'rgba(162,76,57,.09)');
+      }
+      if(variant!==1){
+        g.fillStyle=hair;g.globalAlpha=variant===3?.52:.34;
+        g.beginPath();g.moveTo(80,71);g.quadraticCurveTo(99,99,113,93);
+        g.quadraticCurveTo(128,84,143,93);g.quadraticCurveTo(159,97,176,71);
+        g.lineTo(170,105);g.quadraticCurveTo(128,144,86,105);g.closePath();g.fill();g.globalAlpha=1;
+      }
+      patch(128,90,8.5,1.8,lip);patch(128,92,6.3,1.2,'rgba(224,160,132,.45)');
+    });
+    map.magFilter=T.LinearFilter;
+    const pos=[],uv=[],idx=[],rows=32,cols=64;
+    for(let j=0;j<=rows;j++)for(let k=0;k<=cols;k++){
+      const v=j/rows,u=k/cols,a=(u-.5)*2*Math.PI,b=v*Math.PI;
+      const jaw=1-.19*Math.max(0,(v-.55)/.45),width=.103+variant*.0018;
+      const x=width*Math.sin(b)*Math.sin(a)*jaw;
+      const mound=(cx,cy,wx,wy)=>Math.exp(-(((x-cx)/wx)**2+((v-cy)/wy)**2));
+      let z=.102*Math.sin(b)*Math.cos(a);
+      if(Math.cos(a)>0){
+        z+=.021*mound(0,.53,.016,.12)+.029*mound(0,.59,.020,.046)
+          +.012*mound(0,.83,.041,.09)+.009*(mound(.06,.62,.03,.10)+mound(-.06,.62,.03,.10))
+          -.01*mound(.044,.475,.022,.045)-.01*mound(-.044,.475,.022,.045);
+      }
+      pos.push(x,.089+.143*Math.cos(b),z);uv.push(u,1-v);
+      if(j<rows&&k<cols){const n=j*(cols+1)+k;idx.push(n,n+cols+1,n+1,n+1,n+cols+1,n+cols+2)}
+    }
+    const geometry=new T.BufferGeometry();
+    geometry.setAttribute('position',new T.Float32BufferAttribute(pos,3));
+    geometry.setAttribute('uv',new T.Float32BufferAttribute(uv,2));geometry.setIndex(idx);geometry.computeVertexNormals();
+    return {geometry,material:pixelate(new T.MeshStandardMaterial({map,roughness:.86}))};
+  });
+  function addFace(parent,variant){
+    const {geometry,material}=faces[variant],face=new T.Mesh(geometry,material);
+    face.castShadow=face.receiveShadow=true;parent.add(face);
+  }
   function makePotter(x,z){
     const figure=group(scene,x,.08,z);
     figure.rotation.y=-Math.PI/2;
@@ -625,10 +679,7 @@ function buildMedina() {
     foldedCloth(chest,linen,[[-.04,.178,.142,.06],[.20,.16,.128,.04],[.43,.229,.145,.03],[.50,.19,.12,.02],[.52,.086,.08,0]],linenFinish);
     foldedCloth(chest,0x775541,[[.015,.181,.145,.014],[.094,.172,.14,.014]]);
     const head=group(chest,0,.54,0);
-    oval(head,skin,0,.085,.01,.098,.141,.097);
-    oval(head,skin,0,.081,.105,.024,.032,.027);
-    oval(head,0x49392e,0,.018,.034,.087,.075,.077);
-    for(const side of [-1,1])oval(head,0x342c27,side*.04,.11,.094,.018,.007,.006);
+    addFace(head,0);
     foldedCloth(head,0xd5c5a9,[[.129,.107,.101,.025],[.16,.116,.11,.03],[.203,.105,.098,.04],[.23,.065,.066,.02],[.236,.002,.002,0]]);
     const arms=[];
     for(const side of [-1,1]){
@@ -663,13 +714,15 @@ function buildMedina() {
   let animatePotter;
   function person(x,z,shade,merchant) {
     const p=group(scene,x,.08,z), torso=group(p,0,.43,0);
-    mesh(torso,new T.ConeGeometry(.29,1.06,8),shade,0,.51,0);
-    oval(torso,0x935f44,0,1.16,0,.15,.21,.16);
-    oval(torso,0xe6ceaa,0,1.29,0,.18,.12,.18);
+    foldedCloth(torso,shade,[[-.27,.23,.17,.1],[.35,.20,.15,.08],[.67,.16,.13,.04],[.89,.21,.14,.03],[.98,.10,.09,.02]]);
+    const head=group(torso,0,1,0);
+    addFace(head,townsfolk.length%faces.length);
+    oval(head,0xe6ceaa,0,.188,0,.113,.061,.11);
+    oval(torso,shade,-.202,.69,.01,.075,.22,.08);
     const arm=group(torso,.19,.88,0);
     oval(arm,shade,.035,-.19,0,.085,.24,.085);
     const feet=[-.11,.11].map(dx=>oval(p,0x553b34,dx,.23,0,.085,.23,.11));
-    townsfolk.push({p,torso,arm,feet,x,z,merchant});
+    townsfolk.push({p,torso,head,arm,feet,x,z,merchant});
   }
   // Local depth is measured from the street-facing wall into the building.
   function soukHouse(side,x,z,h,shop){
@@ -961,8 +1014,9 @@ function buildMedina() {
         }
     },
     blocked(x,z){return bounds.some(([cx,cz,w,d])=>Math.abs(x-cx)<w&&Math.abs(z-cz)<d)},
-    animate(t){animatePotter?.(t);townsfolk.forEach(({p,torso,arm,feet,x,z,merchant},i)=>{
+    animate(t){animatePotter?.(t);townsfolk.forEach(({p,torso,head,arm,feet,x,z,merchant},i)=>{
       const phase=t*.45+i;
+      head.rotation.y=.18*Math.sin(phase*.73+i);head.rotation.x=.035*Math.cos(phase);
       if(merchant){arm.rotation.x=-.8+.55*Math.sin(t*1.8+i);p.rotation.y=x>0?-Math.PI/2:Math.PI/2;return}
       p.position.z=z+2.8*Math.sin(phase);p.rotation.y=Math.atan2(.14*Math.sin(phase),Math.cos(phase));
       const stride=Math.sin(t*5+i)*Math.abs(Math.cos(phase));
