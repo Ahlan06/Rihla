@@ -774,8 +774,14 @@ const coinGroup=new T.Group();const coinGeo=new T.CylinderGeometry(.32,.32,.09,1
 for(let d=14;d<156;d+=9){const lane=[-1.75,0,1.75][Math.floor(d/9)%3];const xs=(Math.floor(d/9)%4===0)?[-1.75,0,1.75]:[lane];for(const x of xs){const m=new T.Mesh(coinGeo,coinMat);m.rotation.x=Math.PI/2;m.castShadow=true;const g=new T.Group();g.add(m);g.position.set(x,height(x,-d)+1.35,-d);coinGroup.add(g);coinList.push({g,x,d,taken:false})}}
 coinGroup.visible=false;scene.add(coinGroup);
 const horseGLB=new T.Group();body.add(horseGLB);let horseMixer=null,horseActions={},horseCurrent=null,horseModel=null;
+let trotCycle=0, previousTrotCycle=0, trotting=false;
+const trotHooves=[], hoofPosition=new T.Vector3();
 function playHorseClip(name){if(!horseMixer)return;const next=horseActions[name];if(!next||horseCurrent===name)return;next.reset().fadeIn(.2).play();if(horseCurrent&&horseActions[horseCurrent])horseActions[horseCurrent].fadeOut(.2);horseCurrent=name}
-(async()=>{try{const{GLTFLoader}=await import('https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/loaders/GLTFLoader.js');const loader=new GLTFLoader();const gltf=await new Promise((res,rej)=>loader.load('horse.glb',res,undefined,rej));const model=gltf.scene;const b0=new T.Box3().setFromObject(model);const h0=Math.max(.001,b0.max.y-b0.min.y);model.scale.setScalar(2.8/h0);const box=new T.Box3().setFromObject(model);const c=box.getCenter(new T.Vector3());model.position.x-=c.x;model.position.z-=c.z;model.position.y-=box.min.y;const seen=new Set();model.traverse(o=>{if(o.isMesh){o.castShadow=o.receiveShadow=true;if(!seen.has(o.material)){seen.add(o.material);pixelate(o.material)}}});horseGLB.rotation.y=Math.PI;horseGLB.add(model);horseModel=model;horseMixer=new T.AnimationMixer(model);for(const clip of gltf.animations){const key=String(clip.name).split('|').pop();if(!horseActions[key])horseActions[key]=horseMixer.clipAction(clip)}for(const child of body.children){if(child===rider||child===horseGLB)continue;child.visible=false}rider.position.set(0,(box.max.y-box.min.y)*.58+.3,.08);playHorseClip('Gallop')}catch(e){console.warn('horse.glb non chargé, cheval procédural conservé',e)}})();
+(async()=>{try{const{GLTFLoader}=await import('https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/loaders/GLTFLoader.js');const loader=new GLTFLoader();const gltf=await new Promise((res,rej)=>loader.load('horse.glb',res,undefined,rej));const model=gltf.scene;const b0=new T.Box3().setFromObject(model);const h0=Math.max(.001,b0.max.y-b0.min.y);model.scale.setScalar(2.8/h0);const box=new T.Box3().setFromObject(model);const c=box.getCenter(new T.Vector3());model.position.x-=c.x;model.position.z-=c.z;model.position.y-=box.min.y;const seen=new Set();model.traverse(o=>{if(o.isMesh){o.castShadow=o.receiveShadow=true;if(!seen.has(o.material)){seen.add(o.material);pixelate(o.material)}}});horseGLB.rotation.y=Math.PI;horseGLB.add(model);horseModel=model;
+for(const [name,beat] of [['FrontLowerLegL_end',0],['BackLowerLegR_end',0],['FrontLowerLegR_end',.5],['BackLowerLegL_end',.5]]){
+  const bone=model.getObjectByName(name);if(bone)trotHooves.push({bone,beat});
+}
+horseMixer=new T.AnimationMixer(model);for(const clip of gltf.animations){const key=String(clip.name).split('|').pop();if(!horseActions[key])horseActions[key]=horseMixer.clipAction(clip)}for(const child of body.children){if(child===rider||child===horseGLB)continue;child.visible=false}rider.position.set(0,(box.max.y-box.min.y)*.58+.3,.08);playHorseClip('Gallop')}catch(e){console.warn('horse.glb non chargé, cheval procédural conservé',e)}})();
 let state='ready',dist=0,lane=0,lateral=0,jump=0,vy=0,last=performance.now();
 const freeUI=document.querySelector('#freeUI'),pad=document.querySelector('#pad'),stick=document.querySelector('#stick');
 const map=document.querySelector('#map').getContext('2d'),keys=new Set();
@@ -1000,7 +1006,21 @@ function animateDesert(dt,z){
   }
   ink.needsUpdate=true;
   if(state!=='free'||jump>.08){lastPrint=null;printStep=0;return}
-  if(lastPrint&&lastPrint.mounted===!parked){
+  if(trotting){
+    for(const beat of [0,.5]){
+      if(Math.floor(trotCycle-beat)===Math.floor(previousTrotCycle-beat))continue;
+      if(trotHooves.length===4){
+        for(const hoof of trotHooves)if(hoof.beat===beat){
+          hoof.bone.getWorldPosition(hoofPosition);footprint(hoofPosition.x,hoofPosition.z,heading,.12,.14);
+        }
+      }else{
+        for(const leg of legs)if(((leg.z<0)===(leg.x<0))===(beat===0)){
+          leg.knee.localToWorld(hoofPosition.set(0,-.74,0));footprint(hoofPosition.x,hoofPosition.z,heading,.12,.14);
+        }
+      }
+    }
+    printStep=0;
+  }else if(lastPrint&&lastPrint.mounted===!parked){
     const distance=Math.hypot(lateral-lastPrint.x,z-lastPrint.z);
     if(distance<1.5)printStep+=distance;
     const spacing=parked?.68:(1.45+Math.abs(horseSpeed)*.095)/4;
@@ -1061,17 +1081,28 @@ if(state==='run'){dist+=8*dt;lateral+=(lane*1.75-lateral)*(1-Math.exp(-12*dt));j
 if(pendingDismount&&(state==='free'||state==='run')&&!jump&&!vy)changeMount();
 const z=state==='free'?worldZ:-dist,ground=height(lateral,z),phase=state==='free'?stridePhase:dist*2.3;root.position.set(lateral,ground+jump,z);const sn=Math.sin(heading),cs=Math.cos(heading);
 root.rotation.order='YXZ';root.rotation.y=heading;root.rotation.x=Math.atan((height(lateral-sn,z-cs)-height(lateral+sn,z+cs))/2);
-if(!horseModel){
+const gaitSpeed=Math.abs(horseSpeed);
+const isTrot=state==='free'&&!parked&&!jump&&gaitSpeed>=4&&gaitSpeed<9;
+previousTrotCycle=trotting?trotCycle:-.001;
+trotCycle=isTrot?(trotting?trotCycle:0)+gaitSpeed*dt/3.9:0;
+trotting=isTrot;
 const motion=state==='free'?Math.min(1,Math.abs(horseSpeed)/3):1;
-const gp=phase;
+if(!horseModel){
+const gp=isTrot?trotCycle*2*Math.PI:phase;
 body.position.y=motion*(.075*Math.sin(gp*2)+.025*Math.sin(gp*3));
 body.rotation.x=motion*.04*Math.sin(gp*2+.4);
 rider.rotation.x=motion*(.085*Math.sin(gp+.35)+.03*Math.sin(gp*2));
 tail.rotation.z=motion*.17*Math.sin(gp*.7+.5)+.04*Math.sin(gp*1.4);
 neck.rotation.x=motion*(.05*Math.sin(gp*2+1.1)-.02);
-for(const leg of legs){const front=leg.z<0,sideOff=leg.x>0?.55:0,t=gp+(front?0:2.35)+sideOff;const swing=Math.sin(t),lift=Math.max(0,Math.cos(t));leg.hip.rotation.x=jump?.35:motion*.6*swing;leg.knee.rotation.x=jump?-.95:-motion*(.55*lift+.08)}
-}else{body.position.y=.02*Math.sin(phase*2);body.rotation.x=0}
-if(horseMixer){const want=state==='run'?'Gallop':(parked||Math.abs(horseSpeed)<.3?'Idle':(Math.abs(horseSpeed)<5?'Walk':'Gallop'));playHorseClip(want);horseMixer.update(dt)}
+for(const leg of legs){const front=leg.z<0,sideOff=leg.x>0?.55:0,t=isTrot?gp+((front===(leg.x<0))?0:Math.PI):gp+(front?0:2.35)+sideOff;const swing=Math.sin(t),lift=Math.max(0,Math.cos(t));leg.hip.rotation.x=jump?.35:motion*.6*swing;leg.knee.rotation.x=jump?-.95:-motion*(.55*lift+.08)}
+}else{body.position.y=isTrot?.035*Math.sin(trotCycle*4*Math.PI):.02*Math.sin(phase*2);body.rotation.x=0;rider.rotation.x=0}
+if(horseMixer){
+  const want=state==='run'?'Gallop':parked||gaitSpeed<.3?'Idle':isTrot?'Trot':gaitSpeed<4?'Walk':'Gallop';
+  playHorseClip(want);
+  if(isTrot&&horseActions.Trot){horseActions.Trot.time=trotCycle%1;horseActions.Trot.timeScale=0}
+  horseMixer.update(dt);
+  if(isTrot)rider.rotation.x=.028*Math.sin(4*Math.PI*trotCycle);
+}
 if(parked){
   root.position.set(parked.x,height(parked.x,parked.z),parked.z);
   root.rotation.y=parked.heading;
