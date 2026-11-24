@@ -1,14 +1,19 @@
-# Cahier des charges — RIHLA (open world navigateur)
+# Cahier des charges — RIHLA (open world + parkour & infiltration)
 
-> Document de cadrage du projet. **Version 0.1 — sans histoire scénarisée : priorité à l'open world vivant.**
+> Document de cadrage. **Version 0.2 — sans histoire scénarisée : priorité à l'open world et aux systèmes.**
 
 ---
 
 ## 1. Contexte & vision
 
-**Rihla** est un jeu **open world dans le désert** jouable **directement dans le navigateur**, sans téléchargement. On y incarne un cavalier qui explore un désert vivant : dunes, médina, oasis, campements, caravanes. Le ton est contemplatif et atmosphérique, dans l'esprit de *Red Dead Redemption* (errance à cheval, monde vivant) et *Zelda* (exploration, intérieurs), mais en **stylisé/pixel**, à échelle d'un jeu indépendant.
+**Rihla** est un jeu **open world dans le désert** jouable **directement dans le navigateur**, sans téléchargement. On y incarne un cavalier agile qui explore un désert vivant (dunes, médina, oasis, campements, caravanes) et qui se déplace aussi **à pied, en parkour**, pour infiltrer les zones gardées.
 
-**Objectif actuel :** un **bac à sable** crédible et agréable, **sans histoire** pour l'instant. La narration viendra plus tard.
+La vision **fusionne deux inspirations** :
+
+- **Red Dead Redemption** — errance posée à cheval, monde vivant, atmosphère, PNJ, intérieurs.
+- **Assassin's Creed** — parkour, toits, escalade, infiltration, gardes, Vision d'aigle.
+
+Le tout en **stylisé/pixel**, à échelle d'un jeu indépendant. **Pas d'histoire** pour l'instant : on construit d'abord le monde, les déplacements et les systèmes.
 
 ---
 
@@ -17,7 +22,7 @@
 | Élément | Cible |
 |---|---|
 | Plateforme | Web (WebGL), desktop + mobile |
-| Moteur | Three.js (mono-fichier + assets GLB) |
+| Moteur | Three.js (mono-fichier → modules + assets GLB) |
 | Rendu | **Pixel/low-poly** : basse résolution rendue puis agrandie (nearest-neighbor) |
 | Entrée | Clavier (AZERTY/QWERTY), souris, tactile, joystick |
 | Installation | Aucune — un lien suffit |
@@ -27,29 +32,35 @@
 ## 3. Boucle de jeu principale
 
 1. **Explorer** le désert à cheval ou à pied.
-2. **Entrer dans les bâtiments**, ouvrir les portes.
-3. **Interagir** avec les PNJ (parler, acheter, recevoir une quête légère).
-4. **Découvrir** des lieux, ramasser des objets.
-5. **Revenir** au camp, se reposer, sauvegarder.
+2. **Se déplacer en parkour** : escalader murs, échelles, corniches, toits.
+3. **Infiltrer** les zones gardées (discrétion, couverts, Vision d'aigle).
+4. **Entrer dans les bâtiments**, ouvrir les portes.
+5. **Interagir** avec les PNJ (parler, acheter, quête légère).
+6. **Découvrir**, ramasser des objets, petites missions.
+7. **Revenir** au camp, se reposer, sauvegarder.
 
-> Pas d'objectif narratif imposé : le joueur se fixe ses propres buts (exploration, découverte, petites missions).
+> Pas d'objectif narratif imposé : le joueur se fixe ses propres buts (exploration, infiltration, découverte).
 
 ---
 
 ## 4. Monde ouvert
 
 ### Zones
-- **Dunes** (espace principal, journée/nuit, vent).
+- **Dunes** (espace principal, jour/nuit, vent).
 - **Médina** : souk, casbah, ruelles, place, fontaine.
 - **Oasis** (eau, palmiers).
 - **Hameau** (maisons, puits).
 - **Passage en ruine** (porte monumentale).
 - **Campement** + **caravane** animée.
 
+### Verticalité (parkour)
+- **Toits praticables**, corniches, échelles, balcons, passages.
+- Points d'escalade identifiables ; **sauts de la foi** (descente contrôlée depuis un point haut).
+
 ### Vie du monde
 - **Cycle jour/nuit** (déjà en place) : étoiles, lune, nuages à l'horizon.
 - **Vent** et volutes de sable (déjà en place).
-- **PNJ** qui vaquent, marchands, guides.
+- **PNJ** qui vaquent, marchands, guides, **gardes en patrouille**.
 - **Points d'intérêt** + **minimap**.
 
 ---
@@ -57,8 +68,12 @@
 ## 5. Personnages
 
 ### Joueur
-- Le cavalier **Rihla** : 3ᵉ personne, monte/descend de cheval, marche, court, galope.
+- **Rihla** : 3ᵉ personne, cheval, marche, course, **parkour**, discrétion.
 - **Visage 3D** (voir ci-dessous).
+
+### Gardes (IA)
+- **Patrouilles** et **machines à états** : Patrouille → Soupçon → Alerte → Combat.
+- **Champ de vision**, raycasts, **NavMesh** pour contourner les bâtiments et poursuivre sur les toits.
 
 ### PNJ
 - Marchands, villageois, guide de caravane, conteur.
@@ -69,14 +84,29 @@ Contrainte : les visages sont **de la géométrie 3D**, pas des images plaquées
 - **Tête low-poly** : yeux (sphères/creux), nez, bouche, sourcils, barbe/voile, oreilles.
 - **Paramétrique** : variantes générées (teint, forme du nez, barbe, voile, coiffe).
 - Budget : **~500 à 1 500 triangles** par tête.
-- Deux approches possibles :
-  1. **Procédural** (généré en code, cohérent avec le style actuel) ;
-  2. **Modèles GLB** stylisés (Quaternius, Mixamo retravaillé).
+- Deux approches : **procédural** (généré en code) ou **GLB stylisés**.
 - Le visage doit rester **lisible en pixel** (formes simples, contrastes).
 
 ---
 
-## 6. Intérieurs, portes & interactions
+## 6. Parkour & infiltration
+
+### Parkour
+- **Escalade** (murs, toits), **saut de rebord**, **roulade**, **sauts de la foi**.
+- Géré par un **Kinematic Character Controller** (Rapier) : pentes, marches, sauts, raycasts de rebords.
+
+### Infiltration
+- **Discrétion** : accroupi, couverts, bruit, détection par les gardes.
+- **Vision d'aigle** : surligne cibles / gardes / objets (filtre post-traitement).
+- **Caches** et chemins alternatifs (toits, fenêtres, ruelles).
+
+### Combat léger
+- **Parade**, **esquive**, attaque simple.
+- **Gadgets** : fumigène (fumée/particules).
+
+---
+
+## 7. Intérieurs, portes & interactions
 
 ### Bâtiments entrables
 - Certains bâtiments ont une **porte fonctionnelle**.
@@ -86,29 +116,35 @@ Contrainte : les visages sont **de la géométrie 3D**, pas des images plaquées
 ### Intérieurs
 - Pièces meublées : **souk**, **maison**, **écurie**, **tente**.
 - PNJ à l'intérieur, objets interactifs.
-- Chargés **à la demande** (ne pas tout garder en mémoire).
+- Chargés **à la demande**.
 
 ### Système d'interaction
 - **Détection de proximité** autour du joueur.
-- **Prompt contextuel** : « E — Entrer », « E — Parler », « E — Ouvrir », « E — Ramasser ».
-- Actions : entrer/sortir, ouvrir/fermer une porte, parler, ramasser, s'asseoir, boire le thé.
+- **Prompt contextuel** : « E — Entrer », « E — Parler », « E — Ouvrir », « E — Ramasser », « E — Escalader ».
+- Actions : entrer/sortir, ouvrir/fermer, parler, ramasser, s'asseoir, boire le thé.
 - **Priorité** à l'action la plus proche du regard.
 
 ---
 
-## 7. Systèmes techniques
+## 8. Systèmes techniques
 
 ### Cheval
 - Modèle riggé/animé (fait : `Horse.glb`, clips Gallop/Walk/Idle).
-- **Endurance** (le galop consomme, recharge au pas) — à venir.
+- **Endurance** (le galop consomme, recharge au pas).
 - Montée/descente, transitions d'allures.
 
+### Parkour & physique
+- **Rapier** (Kinematic Character Controller) : pentes, marches, sauts, rebords.
+
+### IA & foules
+- **yuka** (FSM gardes, foule, évitement) + **NavMesh** (`three-pathfinding` / `recast-navigation-js`).
+
 ### Audio
-- Sabots (par allure), vent/sable, ambiance nuit, pièces, portes, voix simples.
-- Musique discrète d'ambiance.
+- Sabots, vent/sable, ambiance nuit, portes, pièces, pas des gardes, voix.
+- **Spatialisation 3D** (howler).
 
 ### Interface (UI)
-- HUD : objectif courant, prompt d'interaction, compteur.
+- HUD : objectif, prompt d'interaction, compteur, **indicateur de détection**.
 - **Minimap** (déjà là).
 - Menus (démarrer, régler, quitter).
 
@@ -117,74 +153,74 @@ Contrainte : les visages sont **de la géométrie 3D**, pas des images plaquées
 
 ---
 
-## 8. Direction artistique
+## 9. Direction artistique
 
 - **Pixel/low-poly**, palette désert : sable chaud, ocre, nuit bleu-indigo, lune blanc-bleu, nuages violets.
 - Cohérence : **tout procédural ou GLB stylisé**, pas de photo-réalisme.
-- Le **rendu pixel** (basse résolution) est un choix esthétique assumé, pas une contrainte.
+- Le **rendu pixel** (basse résolution) est un choix esthétique assumé.
+- La **Vision d'aigle** a une DA dédiée (teinte désaturée, silhouettes surlignées).
 
 ---
 
-## 9. Périmètre
+## 10. Périmètre
 
 ### ✅ Dans le périmètre
-- Exploration libre, cheval, PNJ, bâtiments entrables, portes, interactions.
-- Collectibles, missions légères, audio, sauvegarde, cycle jour/nuit.
+- Open world, cheval, **parkour**, **infiltration**, **gardes**, intérieurs/portes, interactions.
+- **Combat léger** et **gadgets**, Vision d'aigle, collectibles, audio, sauvegarde, cycle jour/nuit.
 
 ### ❌ Hors périmètre (pour l'instant)
 - Histoire scénarisée / cinématiques.
-- Combat (armes, dégâts).
 - Multijoueur.
 - Rendu photoréaliste / UE5.
 
 ---
 
-## 10. Jalons (proposition)
+## 11. Jalons (proposition)
 
 | Jalon | Contenu |
 |---|---|
-| **J1 — Visages & PNJ** | Têtes 3D low-poly, PNJ variés, comportements de base. |
-| **J2 — Interactions** | Système de proximité, prompt, actions contextuelles. |
-| **J3 — Intérieurs** | Premiers bâtiments entrables + portes animées. |
-| **J4 — Ambiance** | Audio (sabots, vent, portes) + caméra cinématique. |
-| **J5 — Contenu** | Missions légères, collectibles, sauvegarde complète. |
+| **J1 — Parkour & physique** | Rapier + camera-controls, escalade, sauts, toits. |
+| **J2 — Gardes & infiltration** | yuka, NavMesh, champ de vision, Vision d'aigle. |
+| **J3 — Intérieurs & portes** | Bâtiments entrables, portes animées, transitions. |
+| **J4 — Combat & gadgets** | Parade, esquive, fumigène, particules. |
+| **J5 — Ambiance & contenu** | Audio spatialisé, sauvegarde, missions légères, collectibles. |
 
 ---
 
-## 11. Contraintes & bonnes pratiques
+## 12. Contraintes & bonnes pratiques
 
 - **Budget poly** maîtrisé (mobile) ; **LOD** et **instancing**.
 - **Compression GLB** (Draco) + textures légères.
 - Cible **60 fps** desktop, fallback mobile.
-- Code maintenable : découper le mono-fichier à terme.
+- Code maintenable : découper le mono-fichier en modules (Vite/TS).
 
 ---
 
-## 12. Stack technique recommandée (à adopter progressivement)
+## 13. Stack technique recommandée (à adopter progressivement)
 
-> Le démo actuel est un fichier unique en Three.js vanilla. Les bibliothèques ci-dessous sont la **cible** pour passer à un vrai jeu structuré — adoption **incrémentale**, pas tout d'un coup.
+> Le démo actuel est un fichier unique en Three.js vanilla. Les bibliothèques ci-dessous sont la **cible** pour passer à un vrai jeu structuré — adoption **incrémentale**.
 
-### 12.1 Rendu 3D & caméra
+### 13.1 Rendu 3D & caméra
 - **three** — cœur du rendu : modèles glTF, lumières, ombres, `AnimationMixer`.
 - **camera-controls** — caméra 3ᵉ personne fluide avec **collisions automatiques contre les murs** (évite que la caméra ne traverse les bâtiments).
 - **postprocessing (pmndrs)** — post-traitement nettement plus rapide que le natif : motion blur, SMAA, bloom, filtre « Vision d'aigle ».
 
-### 12.2 Physique & déplacements (parkour)
+### 13.2 Physique & déplacements (parkour)
 - **@dimforge/rapier3d-compat** — moteur physique WebAssembly ; **Kinematic Character Controller** intégré (pentes, marches, sauts, raycasts de rebords, parkour).
 
-### 12.3 IA & foules
+### 13.3 IA & foules
 - **yuka** — IA de jeu : machines à états finis (Patrouille → Soupçon → Alerte → Combat), comportements de foule, évitement d'obstacles.
 - **three-pathfinding** ou **recast-navigation-js** — génération de **NavMesh** sur la ville pour que les gardes contournent les bâtiments et montent sur les toits.
 
-### 12.4 Audio & effets spéciaux
+### 13.4 Audio & effets spéciaux
 - **howler** — audio fiable avec **spatialisation 3D** (pas des gardes, voix de la foule, direction d'un sifflement).
 - **three-nebula** — moteur de particules : poussière de saut, fumée, étincelles.
 
-### 12.5 Architecture & outils (recommandé)
+### 13.5 Architecture & outils (recommandé)
 - **vite + typescript** — dev ultra-rapide + typage strict (indispensable au-delà de quelques milliers de lignes).
 - **bitecs** ou **miniplex** — ECS performant pour gérer des centaines de PNJ sans ralentir le navigateur.
 
-### 12.6 Principe d'adoption
+### 13.6 Principe d'adoption
 1. Aujourd'hui : fichier unique `demo-3d/index.html`.
 2. Étape 1 : extraire en modules + **Vite/TS**.
 3. Étape 2 : ajouter **Rapier** (physique) + **camera-controls**.
@@ -193,8 +229,10 @@ Contrainte : les visages sont **de la géométrie 3D**, pas des images plaquées
 
 ---
 
-## 13. Indicateurs de réussite (à terme)
+## 14. Indicateurs de réussite (à terme)
 
 - Le joueur peut **errer 5 minutes** sans s'ennuyer.
+- Il peut **escalader jusqu'à un toit** et **sauter de la foi**.
+- Il peut **infiltrer une zone gardée** sans être repéré.
 - Il peut **entrer dans au moins 3 bâtiments** et **interagir** avec 3 PNJ.
 - Le monde reste **fluide** sur un laptop récent.
