@@ -499,6 +499,57 @@ function buildMedina() {
     const courtyard=row===2||row===3;
     casbahHouse(-1,row+4,courtyard?-71:-63,z,courtyard?6.5:7,7.7);
   }
+  // Streets are shared by adjoining blocks; omit one pocket of houses in each
+  // district to leave room for a public courtyard.
+  const extensionRoads=[];
+  function district(xs,zs,quarter){
+    const lane=5.4;
+    for(const x of xs){
+      hillsidePaving(x,(zs[0]+zs.at(-1))/2,lane,zs.at(-1)-zs[0]+lane);
+      extensionRoads.push([x,zs[0],x,zs.at(-1)]);
+    }
+    for(const z of zs)for(let col=1;col<xs.length;col++){
+      const left=xs[col-1],right=xs[col];
+      hillsidePaving((left+right)/2,z,right-left-lane,lane);
+      extensionRoads.push([left,z,right,z]);
+    }
+    for(let row=0;row<zs.length-1;row++)for(let col=0;col<xs.length-1;col++){
+      const left=xs[col],right=xs[col+1],near=zs[row],far=zs[row+1];
+      const cx=(left+right)/2,cz=(near+far)/2;
+      const width=right-left-lane-.8,depth=far-near-lane-.8;
+      if(row===1&&col===(quarter===0?1:2)){
+        hillsidePaving(cx,cz,width+.8,depth+.8);
+        const y=height(cx,cz);
+        add(column,cx,y+.29,cz,3.6,.58,3.6,0xb8946a);
+        add(column,cx,y+.61,cz,2.95,.09,2.95,0x50908c);
+        bounds.push([cx,cz,2.05,2.05]);
+        continue;
+      }
+      // Two party-wall houses with street doors and contrasting roof levels.
+      for(const side of [-1,1]){
+        const x=cx+side*width/4,w=width/2;
+        const y=height(x,cz),h=4.8+((col*3+row*2+side+quarter+9)%4)*.9;
+        const top=y+h,base=Math.min(...[-1,1].flatMap(i=>[-1,1].map(j=>height(x+i*w/2,cz+j*depth/2))))-1;
+        const tone=(quarter===0?[0xe7bb97,0xd6a080,0xf0ceac]:[0xe6cbb1,0xd4ad91,0xe5bca0])[(col+row+(side+1))%3];
+        add(plaster,x,(base+top)/2,cz,w,top-base,depth,tone);
+        terrace(x,top,cz,w,depth);
+        const faceZ=cz+side*depth/2,doorY=height(x,faceZ);
+        add(carved,x,doorY+1.3,faceZ+side*.07,1.5,2.6,.15,0xe9d4ac);
+        for(const off of [-.31,.31])add(screen,x+w*off,doorY+3.4,faceZ+side*.09,1.12,1.15,.2,0xcba981);
+        if((col+row+side)%3===0){
+          add(plaster,x,top+1.25,cz,w*.72,2.5,depth*.58,tone);
+          terrace(x,top+2.5,cz,w*.72,depth*.58);
+        }
+      }
+      bounds.push([cx,cz,width/2+.34,depth/2+.34]);
+    }
+  }
+  district([-134,-115,-96,-77],[-172,-150,-127,-104,-82],0);
+  district([-134,-108,-82,-56,-30,-4,32],[-260,-238,-217,-195,-176],1);
+  // Link the cross streets to the old Casbah and bypass the domed hall on its west side.
+  for(const [x,z,w,d] of [[-38,-163.5,5,25],[-48,-151,20,5],[-67.25,-151,19.5,4],[-56,-163.5,5,25],[-13,-162.5,5,27],[-7,-150,12,4],[-105.5,-174,5,4]]){
+    hillsidePaving(x,z,w,d);
+  }
   const wellX=-64,wellZ=-126,wellY=height(wellX,wellZ);
   add(column,wellX,wellY+.39,wellZ,1.85,.78,1.85,0xe1bc8e);
   add(column,wellX,wellY+.80,wellZ,1.47,.08,1.47,0x554c46);
@@ -749,6 +800,7 @@ function buildMedina() {
     batch.castShadow=batch.receiveShadow=true;scene.add(batch);
   }
   return {
+    extensionRoads,
     cameraObstacles(x,z,reach,nearby){
       nearby.clear();
       for(let ix=Math.floor((x-reach)/12);ix<=Math.floor((x+reach)/12);ix++)
@@ -896,7 +948,8 @@ canvas.addEventListener('wheel',e=>{if(state!=='free')return;e.preventDefault();
 addEventListener('keydown',e=>{if(state!=='free')return;const k=e.key.toLowerCase();if(['arrowup','arrowdown','arrowleft','arrowright','z','q','s','d','w','a','alt','shift',' ','escape'].includes(k)){e.preventDefault();keys.add(k);if(k==='escape')returnMenu();if(k===' '&&!jump&&!vy)vy=5.4}});
 addEventListener('keyup',e=>keys.delete(e.key.toLowerCase()));
 function paintMap(){
- map.fillStyle='#493c45';map.fillRect(0,0,120,144);map.fillStyle='#edc388';
+ map.fillStyle='#493c45';map.fillRect(0,0,120,144);
+ map.strokeStyle='#8e7869';map.lineWidth=.7;map.beginPath();for(const [x,z,x2,z2] of medina.extensionRoads){map.moveTo((x+150)*.4,(z+275)*.4);map.lineTo((x2+150)*.4,(z2+275)*.4)}map.stroke();map.fillStyle='#edc388';
  for(const [x,z] of [[-34,-75],[65,-151],[83,-169]]){const px=(x+150)*.4,py=(z+275)*.4;map.beginPath();map.moveTo(px,py-4);map.lineTo(px-4,py+3);map.lineTo(px+4,py+3);map.fill()}
  map.beginPath();for(let i=0;i<=32;i++){const p=ridgeRoute.getPointAt(i/32);const mx=(p.x+150)*.4,my=(p.z+275)*.4;if(i===0)map.moveTo(mx,my);else map.lineTo(mx,my)}
  map.strokeStyle='#dcab79';map.lineWidth=1.6;map.stroke();
