@@ -591,12 +591,44 @@ function buildMedina() {
     const plaster=side>0?0xffe8c6:0xffcfb6;
     if(shop){
       add(facade,x,(h+3)/2,z,7,h-3,9,plaster);
-      add(cube,at(4.8),1.5,z,4.4,3,9,0x725344);
+      if(side===1 && z===-99){
+        // Cut the entrance out of the plaza-facing end of the solid workshop.
+        add(cube,at(4.8),1.5,z+.8,4.4,3,7.4,0x795742);
+        bounds.push([at(4.8),z+.8,2.55,4.02]);
+        const mouth=z-4.5,axis=at(4.8);
+        for(const sign of [-1,1]){
+          add(cube,axis+sign*1.68,1.5,mouth+.8,1.04,3,1.6,0xd8ab84);
+          bounds.push([axis+sign*1.68,mouth+.8,.78,1.06]);
+        }
+        const arch=new T.Shape();
+        arch.moveTo(-1.2,1.65);arch.quadraticCurveTo(-1.2,2.4,0,2.83);
+        arch.quadraticCurveTo(1.2,2.4,1.2,1.65);arch.lineTo(1.2,3.02);arch.lineTo(-1.2,3.02);arch.closePath();
+        add(new T.ExtrudeGeometry(arch,{depth:1.55,bevelEnabled:false,curveSegments:12}),axis,0,mouth,1,1,1,0xe7bf91);
+        add(carved,axis,1.24,mouth+1.56,2.22,2.48,.1,0xcfae87);
+        for(let step=0;step<3;step++)add(cube,axis,.07+step*.045,mouth-.72+step*.58,2.7-step*.13,.14+step*.09,.66,0xccaa88);
+        for(const [dx,dz,scale] of [[-2,-.56,1.3],[1.93,-.42,.95],[2.5,-.55,.7]]){
+          add(jar,axis+dx,.03,mouth+dz,scale,scale,scale,0xbf825a);
+        }
+        // Deep timber gallery above the door, opening towards the fountain.
+        add(cube,axis,3.19,mouth-.65,4.3,.28,1.68,0x77503c);
+        for(const dx of [-1.87,0,1.87]){
+          add(cube,axis+dx,4.16,mouth-1.35,.18,1.9,.18,0x694937);
+          add(cube,axis+dx,3.76,mouth-1.36,1.14,.78,.10,0x835c42);
+        }
+        add(cube,axis,5.15,mouth-.69,4.55,.22,1.84,0x634736);
+        const lamp=new T.PointLight(0xffb263,12,7,2);
+        lamp.position.set(axis-1.5,2.12,mouth-.53);scene.add(lamp);
+        const glass=mesh(scene,new T.OctahedronGeometry(.22),0xffb464,axis-1.5,2.12,mouth-.53);
+        glass.material.emissive.setHex(0xffa24b);
+        for(const dy of [-.25,.25])add(column,axis-1.5,2.12+dy,mouth-.53,.38,.1,.38,0x51443b);
+      }else{
+        add(cube,at(4.8),1.5,z,4.4,3,9,0x725344);
+        bounds.push([at(4.8),z,2.55,4.85]);
+      }
       for(const dz of [-3.8,3.8]){
         add(cube,at(1.3),1.5,z+dz,2.6,3,1.4,0xc89d78);
         bounds.push([at(1.3),z+dz,1.65,1.05]);
       }
-      bounds.push([at(4.8),z,2.55,4.85]);
       add(cube,at(1.25),.08,z,2.7,.16,6.3,0xb38c70);
       for(const y of [.6,1.55]){
         add(cube,at(2.12),y,z,.75,.11,5.6,0x684739);
