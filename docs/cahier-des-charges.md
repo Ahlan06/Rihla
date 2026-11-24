@@ -160,7 +160,40 @@ Contrainte : les visages sont **de la géométrie 3D**, pas des images plaquées
 
 ---
 
-## 12. Indicateurs de réussite (à terme)
+## 12. Stack technique recommandée (à adopter progressivement)
+
+> Le démo actuel est un fichier unique en Three.js vanilla. Les bibliothèques ci-dessous sont la **cible** pour passer à un vrai jeu structuré — adoption **incrémentale**, pas tout d'un coup.
+
+### 12.1 Rendu 3D & caméra
+- **three** — cœur du rendu : modèles glTF, lumières, ombres, `AnimationMixer`.
+- **camera-controls** — caméra 3ᵉ personne fluide avec **collisions automatiques contre les murs** (évite que la caméra ne traverse les bâtiments).
+- **postprocessing (pmndrs)** — post-traitement nettement plus rapide que le natif : motion blur, SMAA, bloom, filtre « Vision d'aigle ».
+
+### 12.2 Physique & déplacements (parkour)
+- **@dimforge/rapier3d-compat** — moteur physique WebAssembly ; **Kinematic Character Controller** intégré (pentes, marches, sauts, raycasts de rebords, parkour).
+
+### 12.3 IA & foules
+- **yuka** — IA de jeu : machines à états finis (Patrouille → Soupçon → Alerte → Combat), comportements de foule, évitement d'obstacles.
+- **three-pathfinding** ou **recast-navigation-js** — génération de **NavMesh** sur la ville pour que les gardes contournent les bâtiments et montent sur les toits.
+
+### 12.4 Audio & effets spéciaux
+- **howler** — audio fiable avec **spatialisation 3D** (pas des gardes, voix de la foule, direction d'un sifflement).
+- **three-nebula** — moteur de particules : poussière de saut, fumée, étincelles.
+
+### 12.5 Architecture & outils (recommandé)
+- **vite + typescript** — dev ultra-rapide + typage strict (indispensable au-delà de quelques milliers de lignes).
+- **bitecs** ou **miniplex** — ECS performant pour gérer des centaines de PNJ sans ralentir le navigateur.
+
+### 12.6 Principe d'adoption
+1. Aujourd'hui : fichier unique `demo-3d/index.html`.
+2. Étape 1 : extraire en modules + **Vite/TS**.
+3. Étape 2 : ajouter **Rapier** (physique) + **camera-controls**.
+4. Étape 3 : **yuka/NavMesh** + audio spatialisé + particules.
+5. Étape 4 : **ECS** si le nombre de PNJ explose.
+
+---
+
+## 13. Indicateurs de réussite (à terme)
 
 - Le joueur peut **errer 5 minutes** sans s'ennuyer.
 - Il peut **entrer dans au moins 3 bâtiments** et **interagir** avec 3 PNJ.
