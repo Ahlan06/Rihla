@@ -52,7 +52,7 @@ m.position.set(x,y,z);m.castShadow=m.receiveShadow=true;parent.add(m);return m}
 const sphere=new T.SphereGeometry(1,18,14);
 function oval(p,c,x,y,z,a,b,d){const m=mesh(p,sphere,c,x,y,z);m.scale.set(a,b,d);return m}
 const ridgeRoute=new T.CatmullRomCurve3([[22,-148],[33,-148],[41,-144],[47,-133],[49,-114],[48,-94],[44,-76],[37,-61],[26,-50],[20,-39],[12,-33]].map(([x,z])=>new T.Vector3(x,0,z)));
-const discoveryRoute=new T.CatmullRomCurve3([[13,-33],[29,-26],[47,-24],[60,-37],[75,-51],[86,-63],[99,-72],[109,-89],[97,-104],[74,-110],[49,-114]].map(([x,z])=>new T.Vector3(x,0,z)));
+const discoveryRoute=new T.CatmullRomCurve3([[0,-22],[12,-23],[29,-26],[47,-24],[60,-37],[75,-51],[86,-63],[99,-72],[109,-89],[97,-104],[74,-110],[49,-114]].map(([x,z])=>new T.Vector3(x,0,z)));
 const peaks=[[107,-121,16,14],[129,-106,23,19],[134,-82,15,13],[92,-133,12,12]];
 function height(x,z){const ridge=3.8*Math.exp(-((x-48)**2)/86-((z+105)**2)/880);const edge=Math.max(Math.abs(x)-38,-z-182,z+84,0);const blend=Math.min(1,edge/12);const rise=3.2*T.MathUtils.smoothstep(-x,23,35)*(1-T.MathUtils.smoothstep(-x,48,57))*T.MathUtils.smoothstep(-z,108,135)*(1-T.MathUtils.smoothstep(-z,155,169));const basin=Math.hypot((x-51)/7,(z+14)/4.8);
  const relief=peaks.reduce((sum,[px,pz,h,w])=>sum+h*Math.max(0,1-Math.hypot(x-px,(z-pz)*.83)/w)**1.35,0);
@@ -76,16 +76,18 @@ dunes.material.onBeforeCompile=shader=>{
 pixelate(dunes.material);
 for(const [x,z,r] of [[-34,-75,17],[65,-151,24],[83,-169,14]]){const m=mesh(scene,new T.ConeGeometry(r,r*1.25,4),0xb58665,x,height(x,z)+r*.49,z);m.rotation.y=Math.PI/4}
 // Sample the same ground surface as the horse across the entire trail width.
-for(const route of [ridgeRoute,discoveryRoute]){
+const medinaApproach=new T.CatmullRomCurve3([[0,0],[0,-22],[-.45,-48],[0,-69],[0,-82]].map(([x,z])=>new T.Vector3(x,0,z)));
+for(const route of [ridgeRoute,discoveryRoute,medinaApproach]){
 const trackVertices=[],trackIndices=[],trackColors=[];
 for(let row=0;row<=180;row++){
   const t=row/180,p=route.getPointAt(t),v=route.getTangentAt(t);
   for(let col=0;col<=8;col++){
     const offset=(col-4)*.58;
     const x=p.x-v.z*offset,z=p.z+v.x*offset;
-    trackVertices.push(x,height(x,z)+.055,z);
+    trackVertices.push(x,height(x,z)+(route===medinaApproach?.07:.055),z);
     const shade=[1,.95,.81,.89,.94,.89,.81,.95,1][col]*(.98+.02*Math.sin(row*1.4));
-    trackColors.push(.50*shade,.31*shade,.205*shade);
+    const stone=route===medinaApproach;
+    trackColors.push((stone?.44:.50)*shade,(stone?.29:.31)*shade,(stone?.22:.205)*shade);
     if(row&&col){const n=row*9+col;trackIndices.push(n-10,n-9,n,n-10,n,n-1)}
   }
 }
@@ -687,6 +689,37 @@ function buildMedina() {
   }
   const lintelY=Math.max(height(104,-87),height(113,-87))+4.15;
   add(cube,108.5,lintelY,-87,10.8,.72,1.9,0xbb9471);
+  // Two silhouettes repeated along each branch are readable from either direction.
+  const amber=new T.MeshBasicMaterial({color:0xffcb74,fog:true});
+  const lampCore=new T.OctahedronGeometry(.26);
+  function trailMarker(x,z,oasis){
+    const y=height(x,z);
+    add(column,x,y+1.25,z,.18,2.5,.18,0x634a39);
+    bounds.push([x,z,.44,.44]);
+    if(oasis){
+      const cloth=new T.Shape();cloth.moveTo(0,0);cloth.lineTo(0,-.79);cloth.lineTo(1.05,-.28);cloth.closePath();
+      const flag=new T.Mesh(new T.ShapeGeometry(cloth),new T.MeshStandardMaterial({color:0x278e86,side:T.DoubleSide}));
+      flag.position.set(x,y+2.51,z);flag.rotation.y=.55;scene.add(flag);
+    }else{
+      const core=new T.Mesh(lampCore,amber);core.position.set(x,y+2.32,z);scene.add(core);
+      for(const dy of [2.05,2.58])add(column,x,y+dy,z,.53,.1,.53,0x70503a);
+    }
+  }
+  for(const [x,z] of [[4,-19],[16,-20.8],[31,-22.5],[45,-20.6]])trailMarker(x,z,true);
+  for(const [x,z] of [[-3.3,-24],[-3.4,-43],[-3.2,-62],[-3.4,-78]])trailMarker(x,z,false);
+  function wayboard(x,z,yaw,lines){
+    const y=height(x,z);
+    add(column,x,y+1.8,z,.2,3.6,.2,0x64503e);bounds.push([x,z,.46,.46]);
+    const texture=surface(256,96,g=>{
+      g.fillStyle='#403531';g.fillRect(0,0,256,96);g.strokeStyle='#b99567';g.lineWidth=4;g.strokeRect(2,2,252,92);
+      g.textAlign='center';g.font='bold 28px monospace';
+      lines.forEach(([label,color],i)=>{g.fillStyle=color;g.fillText(label,128,i*39+38)});
+    });
+    const board=new T.Mesh(new T.BoxGeometry(3.8,1.43,.16),new T.MeshStandardMaterial({map:texture,emissive:0xffffff,emissiveMap:texture,emissiveIntensity:.32}));
+    board.position.set(x,y+3.25,z);board.rotation.y=yaw;scene.add(board);
+  }
+  wayboard(2.9,-25.4,0,[['↑ MEDINA','#ffd692'],['OASIS →','#85e1cd']]);
+  wayboard(41,-26.9,Math.PI/2,[['↑ CAMP','#ffdaae'],['','#ffdaae']]);
   for(const [shape,items] of batches){
     const material=pixelate(new T.MeshStandardMaterial({map:finishes.get(shape)||null,roughness:.94}));
     const batch=new T.InstancedMesh(shape,material,items.length);
