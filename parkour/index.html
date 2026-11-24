@@ -115,12 +115,15 @@
       return mesh;
     }
 
-    // Obstacles : marche, saut, rebord à escalader, mur haut, rampe.
-    addBox(3, 0.2, -3, 2.2, 0.4, 2.2, 0xb08858);      // marche (0.4)
-    addBox(6.4, 0.45, -3, 2.2, 0.9, 2.2, 0xa47d52);   // saut (0.9)
-    addBox(-3, 0.8, -4.2, 2.6, 1.6, 2.6, 0xb08858);   // rebord à escalader (1.6)
-    addBox(-5.2, 1.5, -0.5, 1.2, 3.0, 6.0, 0x7d6348); // mur haut (3.0) — bloque
-    addBox(9.5, 1.4, -8, 6, 2.8, 6, 0x8a6a4a);        // gros bloc (2.8)
+    // Parcours est : marche, saut court, palier puis escalade du toit.
+    addBox(3, 0.18, -3, 2.4, 0.36, 2.4, 0xb08858);
+    addBox(6, 0.42, -3, 2.4, 0.84, 2.4, 0xa47d52);
+    addBox(6, 0.69, -5.8, 2.4, 1.38, 2.4, 0xb08858);
+    addBox(10.2, 1.4, -7, 6, 2.8, 6, 0x8a6a4a);
+
+    // Parcours ouest : la rampe débouche à côté du mur, puis du rebord.
+    addBox(-6.25, 1.5, -1.9, 1.6, 3.0, 4.4, 0x7d6348);
+    addBox(-3.7, 0.8, -3.2, 2.6, 1.6, 2.6, 0xb08858);
 
     // Rampe inclinée
     {
