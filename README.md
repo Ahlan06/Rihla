@@ -27,4 +27,10 @@ The desert uses Three.js and WebGL. A low-resolution render keeps the edges cris
 
 Rihla also includes its original [2D ride](https://rihla-peach.vercel.app/) and a separate [parkour prototype](https://rihla-peach.vercel.app/parkour/).
 
+## Contributing
+
+Contributions are welcome. If you find a bug, tell us where you were in the game, what you expected, and which browser or device you used. Ideas for new places and improvements to movement are welcome too. [Open an issue](https://github.com/Ahlan06/Rihla/issues)
+
+To contribute code, fork the repository, make your change on a branch, and open a pull request against `main`. Describe how to try it in the game. For a visual change, a before-and-after screenshot helps reviewers see the difference.
+
 Created by [Ahlan MIRA](https://github.com/Ahlan06).
