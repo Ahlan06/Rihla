@@ -448,14 +448,22 @@ function buildMedina() {
   const haloPlane=new T.PlaneGeometry(2.6,3.3);
   function casbahHouse(side,i,x,z,w,d=8.25){
     const face=x-side*w/2;
-    const base=height(x,z),top=base+4.9+(i*3+(side+1))%4;
+    const base=height(x,z),top=base+8.1+(i*3+(side+1))%4;
     const color=lime[(i+(side+1))%lime.length];
     const footing=Math.min(-1,...[-1,1].flatMap(s=>[-1,1].map(t=>height(x+s*w/2,z+t*d/2)-.5)));
     add(plaster,x,(top+footing)/2,z,w,top-footing,d,color);bounds.push([x,z,w/2+.32,d/2+.28]);
     terrace(x,top,z,w,d);
-    const upperX=x-side*.34, upperZ=z+.65, upperH=2.6+i%2;
+    const upperX=x-side*.34, upperZ=z+.65, upperH=3.1+i%2;
     add(plaster,upperX,top+upperH/2,upperZ,w*.88,upperH,d*.66,color);
     terrace(upperX,top+upperH,upperZ,w*.88,d*.66);
+    // Upper-storey windows meet the same sill line even as the street climbs.
+    const sill=top-2.25;
+    for(const dz of [-2.1,0,2.1]){
+      add(screen,face-side*.055,sill+.65,z+dz,.13,1.3,.88,0xbca489);
+      add(cube,face-side*.14,sill-.06,z+dz,.32,.16,1.12,0xcfa680);
+    }
+    const upperFace=upperX-side*w*.44;
+    add(screen,upperFace-side*.05,top+upperH*.52,upperZ,.14,1.35,1.1,0xb59778);
     const edge=face-side*.52;
     add(cube,edge,base+3.45,z,1.18,.24,3.4,0x79563e);
     add(screen,edge,base+4.7,z,1.14,2.3,3.18,color);
@@ -528,7 +536,7 @@ function buildMedina() {
       // Two party-wall houses with street doors and contrasting roof levels.
       for(const side of [-1,1]){
         const x=cx+side*width/4,w=width/2;
-        const y=height(x,cz),h=4.8+((col*3+row*2+side+quarter+9)%4)*.9;
+        const y=height(x,cz),h=8.4+((col*3+row*2+side+quarter+9)%4)*1.15;
         const top=y+h,base=Math.min(...[-1,1].flatMap(i=>[-1,1].map(j=>height(x+i*w/2,cz+j*depth/2))))-1;
         const tone=(quarter===0?[0xe7bb97,0xd6a080,0xf0ceac]:[0xe6cbb1,0xd4ad91,0xe5bca0])[(col+row+(side+1))%3];
         add(plaster,x,(base+top)/2,cz,w,top-base,depth,tone);
@@ -536,6 +544,14 @@ function buildMedina() {
         const faceZ=cz+side*depth/2,doorY=height(x,faceZ);
         add(carved,x,doorY+1.3,faceZ+side*.07,1.5,2.6,.15,0xe9d4ac);
         for(const off of [-.31,.31])add(screen,x+w*off,doorY+3.4,faceZ+side*.09,1.12,1.15,.2,0xcba981);
+        // Carry the floor line around the corner and light both street elevations.
+        const band=top-2.7;
+        add(cube,x,band,cz,w+.1,.18,depth+.12,0xc69975);
+        for(const off of [-.27,.27]){
+          add(screen,x+w*off,band+1.13,faceZ+side*.085,1.12,1.48,.19,0xc3a789);
+          add(cube,x+w*off,band+.35,faceZ+side*.16,1.38,.14,.34,0xe6c6a1);
+          add(screen,x+side*(w/2+.055),band+1.13,cz+depth*off,.14,1.48,1.1,0xc3a789);
+        }
         if((col+row+side)%3===0){
           add(plaster,x,top+1.25,cz,w*.72,2.5,depth*.58,tone);
           terrace(x,top+2.5,cz,w*.72,depth*.58);
@@ -600,7 +616,7 @@ function buildMedina() {
       add(facade,x,h/2,z,7,h,9,plaster);
       bounds.push([x,z,3.85,4.85]);
     }
-    const base=shop?3.24:h*.56;
+    const base=shop?3.24:4.15;
     const timber=0x674536;
     add(cube,at(-.57),base,z,1.55,.25,4.35,timber);
     add(cube,at(-.57),base+1.65,z,1.65,.22,4.5,timber);
@@ -612,7 +628,7 @@ function buildMedina() {
     for(const y of [.22,.62,1.09])add(cube,at(-1.22),base+y,z,.14,.10,4.05,timber);
   }
   for(const side of [-1,1])for(let i=0;i<6;i++){
-    const z=-88-i*11, x=side*(10+(i%2)), h=5+(i*3+(side+1))%5;
+    const z=-88-i*11, x=side*(10+(i%2)), h=8+(i*3+(side+1))%5;
     if(i===2||i===5)continue; // Open the plaza and rear cross street.
     soukHouse(side,x,z,h,i%2===1);
     add(cube,x,h,z,7.5,.38,9.5,0xd3a17c);
