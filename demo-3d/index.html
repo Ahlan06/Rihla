@@ -575,6 +575,70 @@ function buildMedina() {
   add(column,wellX+.12,wellY+1.75,wellZ,.04,1.85,.04,0x937552);
   bounds.push([wellX,wellZ,1.22,1.12]);
   const townsfolk=[];
+  // Cloth rings follow the shoulders, waist and shins; alternating radii form pleats.
+  function foldedCloth(parent, color, rings) {
+    const positions=[], indices=[], segments=36;
+    for(const [y,width,depth,pleat] of rings){
+      for(let i=0;i<segments;i++){
+        const a=i*2*Math.PI/segments, fold=1+pleat*Math.cos(9*a+y*.75);
+        positions.push(width*Math.cos(a)*fold,y,depth*Math.sin(a)*fold);
+      }
+    }
+    for(let row=1;row<rings.length;row++)for(let i=0;i<segments;i++){
+      const a=(row-1)*segments+i,b=(row-1)*segments+(i+1)%segments;
+      indices.push(a,a+segments,b,b,a+segments,b+segments);
+    }
+    const geometry=new T.BufferGeometry();
+    geometry.setAttribute('position',new T.Float32BufferAttribute(positions,3));
+    geometry.setIndex(indices);geometry.computeVertexNormals();
+    return mesh(parent,geometry,color,0,0,0);
+  }
+  function makePotter(x,z){
+    const figure=group(scene,x,.08,z);
+    figure.rotation.y=-Math.PI/2;
+    const clay=0xb9714d, linen=0xd9c29c, skin=0x996447;
+    for(const side of [-1,1])oval(figure,0x504132,side*.105,.072,.032,.078,.073,.146);
+    foldedCloth(figure,linen,[[.12,.234,.16,.13],[.64,.207,.14,.10],[.96,.165,.125,.06]]);
+    const chest=group(figure,0,.90,0);
+    foldedCloth(chest,linen,[[-.04,.178,.142,.06],[.20,.16,.128,.04],[.43,.229,.145,.03],[.50,.19,.12,.02],[.52,.086,.08,0]]);
+    foldedCloth(chest,0x775541,[[.015,.181,.145,.014],[.094,.172,.14,.014]]);
+    const head=group(chest,0,.54,0);
+    oval(head,skin,0,.085,.01,.098,.141,.097);
+    oval(head,skin,0,.081,.105,.024,.032,.027);
+    oval(head,0x49392e,0,.018,.034,.087,.075,.077);
+    for(const side of [-1,1])oval(head,0x342c27,side*.04,.11,.094,.018,.007,.006);
+    foldedCloth(head,0xd5c5a9,[[.129,.107,.101,.025],[.16,.116,.11,.03],[.203,.105,.098,.04],[.23,.065,.066,.02],[.236,.002,.002,0]]);
+    const arms=[];
+    for(const side of [-1,1]){
+      const shoulder=group(chest,side*.195,.425,0);
+      foldedCloth(shoulder,linen,[[-.253,.065,.071,.07],[-.12,.077,.08,.05],[0,.081,.086,.04],[.04,.028,.034,.01]]);
+      const elbow=group(shoulder,0,-.24,0);
+      foldedCloth(elbow,linen,[[-.205,.065,.066,.07],[-.06,.07,.071,.06],[.018,.055,.06,.03]]);
+      oval(elbow,skin,0,-.238,.01,.045,.073,.04);
+      arms.push({shoulder,elbow});
+    }
+    const vessel=group(figure,0,0,.34);
+    foldedCloth(vessel,clay,[[0,.065,.065,0],[.035,.091,.091,0],[.128,.116,.116,0],[.18,.087,.087,0],[.212,.059,.059,0],[.222,.073,.073,0]]);
+    const lip=mesh(vessel,new T.TorusGeometry(.066,.009,6,24),clay,0,.222,0);
+    lip.rotation.x=Math.PI/2;
+    return t=>{
+      const breath=Math.sin(t*1.55), work=(1-Math.cos(t*.83))*.5;
+      chest.rotation.x=.065+.095*work+.008*breath;
+      head.rotation.x=.08+.19*work;
+      head.rotation.y=.23*Math.sin(t*.7)*(1-work);
+      arms.forEach(({shoulder,elbow},i)=>{
+        shoulder.rotation.x=-.52-.20*work;
+        shoulder.rotation.z=(i===0?1:-1)*.18;
+        elbow.rotation.x=-.93-.36*work;
+      });
+      // The pot rests between both palms as the potter raises it for inspection.
+      const palm=arms[0].elbow.localToWorld(new T.Vector3(0,-.238,.01));
+      figure.worldToLocal(palm);
+      vessel.position.set(0,palm.y-.105,palm.z);
+      vessel.rotation.y=t*.32;
+    };
+  }
+  let animatePotter;
   function person(x,z,shade,merchant) {
     const p=group(scene,x,.08,z), torso=group(p,0,.43,0);
     mesh(torso,new T.ConeGeometry(.29,1.06,8),shade,0,.51,0);
@@ -691,7 +755,8 @@ function buildMedina() {
       for(const dz of [-2.3,2.3])add(column,side*4.1,1.22,z+dz,.12,2.5,.12,0x684536);
       add(cube,sx,.52,z,1.3,.94,4.4,0x825539);
       for(let k=0;k<12;k++)add(dome,sx+(k%2)*.38-.2,1.01,z-1.65+Math.floor(k/2)*.62,.24,.27,.27,[0xb95735,0xcaa44c,0x768953][k%3]);
-      person(side*6.3,z,i===3?0x546f70:0x994e3e,true);
+      if(side===1&&i===1)animatePotter=makePotter(side*6.3,z);
+      else person(side*6.3,z,i===3?0x546f70:0x994e3e,true);
     }
     person(side*3.45,z, [0x7d555e,0x657a77,0xbc8d57,0xd7c4a7][(i+(side+1))%4],false);
   }
@@ -874,7 +939,7 @@ function buildMedina() {
         }
     },
     blocked(x,z){return bounds.some(([cx,cz,w,d])=>Math.abs(x-cx)<w&&Math.abs(z-cz)<d)},
-    animate(t){townsfolk.forEach(({p,torso,arm,feet,x,z,merchant},i)=>{
+    animate(t){animatePotter?.(t);townsfolk.forEach(({p,torso,arm,feet,x,z,merchant},i)=>{
       const phase=t*.45+i;
       if(merchant){arm.rotation.x=-.8+.55*Math.sin(t*1.8+i);p.rotation.y=x>0?-Math.PI/2:Math.PI/2;return}
       p.position.z=z+2.8*Math.sin(phase);p.rotation.y=Math.atan2(.14*Math.sin(phase),Math.cos(phase));
