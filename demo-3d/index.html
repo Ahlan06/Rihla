@@ -342,6 +342,24 @@ function buildMedina() {
     const tex=new T.CanvasTexture(sheet); tex.colorSpace=T.SRGBColorSpace; tex.magFilter=T.NearestFilter;
     return tex;
   }
+  const textureLoader=new T.TextureLoader();
+  function workshopFinish(name,repeatX,repeatY,bumpScale){
+    function load(suffix){
+      const texture=textureLoader.load('textures/'+name+suffix+'.png');
+      texture.wrapS=texture.wrapT=T.RepeatWrapping;
+      texture.repeat.set(repeatX,repeatY);
+      texture.anisotropy=Math.min(4,renderer.capabilities.getMaxAnisotropy());
+      return texture;
+    }
+    const map=load('');
+    map.colorSpace=T.SRGBColorSpace;
+    const surfaceMap=load('-surface');
+    return {map,bumpMap:surfaceMap,roughnessMap:surfaceMap,bumpScale,roughness:1};
+  }
+  const linenFinish=workshopFinish('linen',2,2,.0015);
+  const clayFinish=workshopFinish('earthenware',1,1,.001);
+  const wallFinish=workshopFinish('limewash',4,3,.025);
+  const workshopWall=cube.clone();
   const facade=cube.clone();
   const masonry=surface(96,96,g=>{
     g.fillStyle='#ddb288';g.fillRect(0,0,96,96);
@@ -576,31 +594,35 @@ function buildMedina() {
   bounds.push([wellX,wellZ,1.22,1.12]);
   const townsfolk=[];
   // Cloth rings follow the shoulders, waist and shins; alternating radii form pleats.
-  function foldedCloth(parent, color, rings) {
-    const positions=[], indices=[], segments=36;
+  function foldedCloth(parent, color, rings, finish) {
+    const positions=[], uvs=[], indices=[], segments=36, stride=segments+1;
     for(const [y,width,depth,pleat] of rings){
-      for(let i=0;i<segments;i++){
+      for(let i=0;i<=segments;i++){
         const a=i*2*Math.PI/segments, fold=1+pleat*Math.cos(9*a+y*.75);
         positions.push(width*Math.cos(a)*fold,y,depth*Math.sin(a)*fold);
+        uvs.push(i/segments,(y-rings[0][0])/(rings[rings.length-1][0]-rings[0][0]));
       }
     }
     for(let row=1;row<rings.length;row++)for(let i=0;i<segments;i++){
-      const a=(row-1)*segments+i,b=(row-1)*segments+(i+1)%segments;
-      indices.push(a,a+segments,b,b,a+segments,b+segments);
+      const a=(row-1)*stride+i,b=a+1;
+      indices.push(a,a+stride,b,b,a+stride,b+stride);
     }
     const geometry=new T.BufferGeometry();
     geometry.setAttribute('position',new T.Float32BufferAttribute(positions,3));
     geometry.setIndex(indices);geometry.computeVertexNormals();
-    return mesh(parent,geometry,color,0,0,0);
+    geometry.setAttribute('uv',new T.Float32BufferAttribute(uvs,2));
+    const part=mesh(parent,geometry,color,0,0,0);
+    if(finish)part.material.setValues(finish);
+    return part;
   }
   function makePotter(x,z){
     const figure=group(scene,x,.08,z);
     figure.rotation.y=-Math.PI/2;
     const clay=0xb9714d, linen=0xd9c29c, skin=0x996447;
     for(const side of [-1,1])oval(figure,0x504132,side*.105,.072,.032,.078,.073,.146);
-    foldedCloth(figure,linen,[[.12,.234,.16,.13],[.64,.207,.14,.10],[.96,.165,.125,.06]]);
+    foldedCloth(figure,linen,[[.12,.234,.16,.13],[.64,.207,.14,.10],[.96,.165,.125,.06]],linenFinish);
     const chest=group(figure,0,.90,0);
-    foldedCloth(chest,linen,[[-.04,.178,.142,.06],[.20,.16,.128,.04],[.43,.229,.145,.03],[.50,.19,.12,.02],[.52,.086,.08,0]]);
+    foldedCloth(chest,linen,[[-.04,.178,.142,.06],[.20,.16,.128,.04],[.43,.229,.145,.03],[.50,.19,.12,.02],[.52,.086,.08,0]],linenFinish);
     foldedCloth(chest,0x775541,[[.015,.181,.145,.014],[.094,.172,.14,.014]]);
     const head=group(chest,0,.54,0);
     oval(head,skin,0,.085,.01,.098,.141,.097);
@@ -611,14 +633,14 @@ function buildMedina() {
     const arms=[];
     for(const side of [-1,1]){
       const shoulder=group(chest,side*.195,.425,0);
-      foldedCloth(shoulder,linen,[[-.253,.065,.071,.07],[-.12,.077,.08,.05],[0,.081,.086,.04],[.04,.028,.034,.01]]);
+      foldedCloth(shoulder,linen,[[-.253,.065,.071,.07],[-.12,.077,.08,.05],[0,.081,.086,.04],[.04,.028,.034,.01]],linenFinish);
       const elbow=group(shoulder,0,-.24,0);
-      foldedCloth(elbow,linen,[[-.205,.065,.066,.07],[-.06,.07,.071,.06],[.018,.055,.06,.03]]);
+      foldedCloth(elbow,linen,[[-.205,.065,.066,.07],[-.06,.07,.071,.06],[.018,.055,.06,.03]],linenFinish);
       oval(elbow,skin,0,-.238,.01,.045,.073,.04);
       arms.push({shoulder,elbow});
     }
     const vessel=group(figure,0,0,.34);
-    foldedCloth(vessel,clay,[[0,.065,.065,0],[.035,.091,.091,0],[.128,.116,.116,0],[.18,.087,.087,0],[.212,.059,.059,0],[.222,.073,.073,0]]);
+    foldedCloth(vessel,clay,[[0,.065,.065,0],[.035,.091,.091,0],[.128,.116,.116,0],[.18,.087,.087,0],[.212,.059,.059,0],[.222,.073,.073,0]],clayFinish);
     const lip=mesh(vessel,new T.TorusGeometry(.066,.009,6,24),clay,0,.222,0);
     lip.rotation.x=Math.PI/2;
     return t=>{
@@ -655,14 +677,14 @@ function buildMedina() {
     const at=depth=>front+side*depth;
     const plaster=side>0?0xffe8c6:0xffcfb6;
     if(shop){
-      add(facade,x,(h+3)/2,z,7,h-3,9,plaster);
+      add(side===1&&z===-99?workshopWall:facade,x,(h+3)/2,z,7,h-3,9,plaster);
       if(side===1 && z===-99){
         // Cut the entrance out of the plaza-facing end of the solid workshop.
-        add(cube,at(4.8),1.5,z+.8,4.4,3,7.4,0x795742);
+        add(workshopWall,at(4.8),1.5,z+.8,4.4,3,7.4,0x795742);
         bounds.push([at(4.8),z+.8,2.55,4.02]);
         const mouth=z-4.5,axis=at(4.8);
         for(const sign of [-1,1]){
-          add(cube,axis+sign*1.68,1.5,mouth+.8,1.04,3,1.6,0xd8ab84);
+          add(workshopWall,axis+sign*1.68,1.5,mouth+.8,1.04,3,1.6,0xd8ab84);
           bounds.push([axis+sign*1.68,mouth+.8,.78,1.06]);
         }
         const arch=new T.Shape();
@@ -923,7 +945,7 @@ function buildMedina() {
   for(const [x,z] of [[4,-19],[16,-20.8],[31,-22.5],[45,-20.6]])trailMarker(x,z,true);
   for(const [x,z] of [[-3.3,-24],[-3.4,-43],[-3.2,-62],[-3.4,-78]])trailMarker(x,z,false);
   for(const [shape,items] of batches){
-    const material=pixelate(new T.MeshStandardMaterial({map:finishes.get(shape)||null,roughness:.94}));
+    const material=pixelate(new T.MeshStandardMaterial(shape===workshopWall?wallFinish:{map:finishes.get(shape)||null,roughness:.94}));
     const batch=new T.InstancedMesh(shape,material,items.length);
     items.forEach(([matrix,color],i)=>{batch.setMatrixAt(i,matrix);batch.setColorAt(i,new T.Color(color))});
     batch.castShadow=batch.receiveShadow=true;scene.add(batch);
