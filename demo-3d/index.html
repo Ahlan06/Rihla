@@ -446,7 +446,7 @@ function buildMedina() {
   });
   const haloMaterial=new T.MeshBasicMaterial({map:halo,transparent:true,depthWrite:false,blending:T.AdditiveBlending});
   const haloPlane=new T.PlaneGeometry(2.6,3.3);
-  function casbahHouse(side,i,x,z,w,d=8.12){
+  function casbahHouse(side,i,x,z,w,d=8.25){
     const face=x-side*w/2;
     const base=height(x,z),top=base+4.9+(i*3+(side+1))%4;
     const color=lime[(i+(side+1))%lime.length];
@@ -494,10 +494,10 @@ function buildMedina() {
   hillsidePaving(-63,-126,9,13);
   for(let row=0;row<6;row++){
     const z=-106.6-row*7.7;
-    casbahHouse(1,row+2,-49,z,6,7.4);
+    casbahHouse(1,row+2,-49,z,6,7.7);
     // The middle houses sit back to open the courtyard to the lane.
     const courtyard=row===2||row===3;
-    casbahHouse(-1,row+4,courtyard?-71:-63,z,courtyard?6.5:7,7.4);
+    casbahHouse(-1,row+4,courtyard?-71:-63,z,courtyard?6.5:7,7.7);
   }
   const wellX=-64,wellZ=-126,wellY=height(wellX,wellZ);
   add(column,wellX,wellY+.39,wellZ,1.85,.78,1.85,0xe1bc8e);
@@ -581,6 +581,41 @@ function buildMedina() {
     person(side*3.45,z, [0x7d555e,0x657a77,0xbc8d57,0xd7c4a7][(i+(side+1))%4],false);
   }
 
+  // Join the paired street fronts; the two cross streets stay open.
+  for(const side of [-1,1])for(const z of [-93.5,-126.5]){
+    const x=side*10.5;
+    add(plaster,x,2.65,z,6.1,5.3,2.04,0xdfad91);
+    bounds.push([x,z,3.35,1.28]);
+    terrace(x,5.3,z,6.1,2);
+  }
+
+  // A horseshoe opening widens above its spring line, then curves back to the crown.
+  const vaultProfile=new T.Shape();
+  vaultProfile.moveTo(-4.5,0);vaultProfile.lineTo(-2.55,0);vaultProfile.lineTo(-2.55,3.4);
+  vaultProfile.bezierCurveTo(-3.65,5.05,-2.55,6.7,0,7.2);
+  vaultProfile.bezierCurveTo(2.55,6.7,3.65,5.05,2.55,3.4);
+  vaultProfile.lineTo(2.55,0);vaultProfile.lineTo(4.5,0);vaultProfile.lineTo(4.5,8);
+  vaultProfile.lineTo(-4.5,8);vaultProfile.closePath();
+  const streetVault=new T.ExtrudeGeometry(vaultProfile,{depth:2.2,bevelEnabled:false,curveSegments:14});
+  const tile=cube.clone();
+  finishes.set(tile,surface(64,16,g=>{
+    g.fillStyle='#e6cf9f';g.fillRect(0,0,64,16);
+    for(let y=0;y<16;y++)for(let x=0;x<64;x++){
+      const ring=Math.abs(x%16-8)+Math.abs(y-8);
+      if(ring<4||ring===7||ring>12){g.fillStyle=ring<4?'#476f69':'#855947';g.fillRect(x,y,1,1)}
+    }
+  }));
+  for(const [x,z,tone] of [[-35,-118,0xf0ceb0],[-56,-136,0xdaac94]]){
+    const floor=height(x,z);
+    add(streetVault,x,floor-.45,z,1,1,1,tone);
+    for(const side of [-1,1]){
+      bounds.push([x+side*3.54,z+1.1,1.24,1.38]);
+      add(screen,x+side*2.35,floor+8.55,z+1.1,1.35,1.18,2.45,0xe4bd9d);
+    }
+    add(plaster,x,floor+8.55,z+1.1,9,2.02,2.2,tone);
+    for(const face of [-.04,2.24])add(tile,x,floor+7.42,z+face,8.92,.26,.1,0xffffff);
+    terrace(x,floor+9.58,z+1.1,9,2.35);
+  }
   // A vaulted entrance frames the approach while clearing all three race lanes.
   const archOutline=new T.Shape();
   archOutline.moveTo(-5.8,0);archOutline.lineTo(-4.1,0);archOutline.lineTo(-4.1,4);
