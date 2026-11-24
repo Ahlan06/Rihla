@@ -120,24 +120,85 @@
     controller.setMaxSlopeClimbAngle(48 * Math.PI / 180);
     controller.setMinSlopeSlideAngle(35 * Math.PI / 180);
 
-    const bodyMesh = new T.Group();
-    const capsule = new T.Mesh(
-      new T.CapsuleGeometry(R, HH * 2, 6, 14),
-      new T.MeshStandardMaterial({ color: 0x8a6a4a, roughness: 0.75 }),
-    );
-    capsule.castShadow = true;
-    bodyMesh.add(capsule);
-    const visor = new T.Mesh(
-      new T.BoxGeometry(0.24, 0.12, 0.1),
-      new T.MeshStandardMaterial({ color: 0xffd27a, emissive: 0x4a2800 }),
-    );
-    visor.position.set(0, 0.42, 0.36);
-    bodyMesh.add(visor);
+    function createHuman() {
+      const g = new T.Group();
+      const skin = new T.MeshStandardMaterial({ color: 0xc39a6b, roughness: 0.85 });
+      const robe = new T.MeshStandardMaterial({ color: 0xe8e2d3, roughness: 0.9 });
+      const dark = new T.MeshStandardMaterial({ color: 0x24242c, roughness: 0.9 });
+      const hair = new T.MeshStandardMaterial({ color: 0x1d1a20, roughness: 0.95 });
+
+      const torso = new T.Mesh(new T.CylinderGeometry(0.19, 0.25, 0.55, 10), robe);
+      torso.position.y = 1.04;
+      torso.castShadow = true;
+      g.add(torso);
+
+      const legs = {};
+      for (const s of [-1, 1]) {
+        const pivot = new T.Group();
+        pivot.position.set(s * 0.1, 0.8, 0);
+        const leg = new T.Mesh(new T.CylinderGeometry(0.07, 0.06, 0.8, 8), dark);
+        leg.position.y = -0.4;
+        leg.castShadow = true;
+        pivot.add(leg);
+        g.add(pivot);
+        legs[s < 0 ? 'L' : 'R'] = pivot;
+      }
+
+      const arms = {};
+      for (const s of [-1, 1]) {
+        const pivot = new T.Group();
+        pivot.position.set(s * 0.27, 1.24, 0);
+        const arm = new T.Mesh(new T.CylinderGeometry(0.055, 0.05, 0.55, 8), robe);
+        arm.position.y = -0.27;
+        arm.castShadow = true;
+        const hand = new T.Mesh(new T.SphereGeometry(0.06, 8, 6), skin);
+        hand.position.y = -0.56;
+        pivot.add(arm);
+        pivot.add(hand);
+        g.add(pivot);
+        arms[s < 0 ? 'L' : 'R'] = pivot;
+      }
+
+      // Tête + visage 3D (géométrie, pas de texture PNG)
+      const head = new T.Group();
+      head.position.y = 1.44;
+      g.add(head);
+      const skull = new T.Mesh(new T.SphereGeometry(0.15, 12, 10), skin);
+      skull.scale.set(1, 1.15, 1);
+      skull.castShadow = true;
+      head.add(skull);
+      for (const s of [-1, 1]) {
+        const eye = new T.Mesh(new T.SphereGeometry(0.022, 6, 6), dark);
+        eye.position.set(s * 0.05, 0.02, 0.146);
+        head.add(eye);
+        const brow = new T.Mesh(new T.BoxGeometry(0.06, 0.012, 0.012), hair);
+        brow.position.set(s * 0.05, 0.065, 0.14);
+        head.add(brow);
+      }
+      const nose = new T.Mesh(new T.ConeGeometry(0.028, 0.07, 6), skin);
+      nose.rotation.x = Math.PI / 2;
+      nose.position.set(0, -0.01, 0.15);
+      head.add(nose);
+      const mouth = new T.Mesh(new T.BoxGeometry(0.075, 0.018, 0.012), dark);
+      mouth.position.set(0, -0.06, 0.14);
+      head.add(mouth);
+      const cap = new T.Mesh(new T.SphereGeometry(0.155, 10, 8, 0, Math.PI * 2, 0, Math.PI * 0.55), hair);
+      cap.position.y = 0.02;
+      head.add(cap);
+      const scarf = new T.Mesh(new T.CylinderGeometry(0.155, 0.16, 0.1, 10), dark);
+      scarf.position.y = -0.12;
+      head.add(scarf);
+
+      g.userData = { legL: legs.L, legR: legs.R, armL: arms.L, armR: arms.R, head, torso };
+      return g;
+    }
+
+    const bodyMesh = createHuman();
     scene.add(bodyMesh);
 
     // ---------- État / entrées ----------
     const keys = new Set();
-    let grounded = false, vy = 0, heading = 0, moving = false, mx = 0, mz = 0;
+    let grounded = false, vy = 0, heading = 0, moving = false, mx = 0, mz = 0, walkPhase = 0;
     let camYaw = 0, camPitch = 0.26, camDist = 7.0;
     let mantle = null, cooldown = 0;
 
@@ -216,9 +277,22 @@
 
     function updateMeshAndCamera(dt) {
       const t = body.translation();
-      bodyMesh.position.set(t.x, t.y, t.z);
+      bodyMesh.position.set(t.x, t.y - CENTER_OFF, t.z);
       if (moving) heading = Math.atan2(mx, mz);
       bodyMesh.rotation.y += shortestAngle(bodyMesh.rotation.y, heading) * Math.min(1, dt * 14);
+
+      const H = bodyMesh.userData;
+      const mag = Math.min(1, Math.hypot(mx, mz));
+      if (grounded) {
+        walkPhase += (mag * 4.8) * dt * 2.6;
+        const sw = Math.sin(walkPhase) * 0.6 * mag;
+        H.legL.rotation.x = sw; H.legR.rotation.x = -sw;
+        H.armL.rotation.x = -sw * 0.8; H.armR.rotation.x = sw * 0.8;
+        H.head.rotation.x = 0.02 * Math.sin(walkPhase * 2);
+      } else {
+        H.legL.rotation.x = -0.55; H.legR.rotation.x = 0.25;
+        H.armL.rotation.x = -0.5; H.armR.rotation.x = -0.5;
+      }
 
       const targetYaw = camYaw;
       forward.x = -Math.sin(targetYaw);
