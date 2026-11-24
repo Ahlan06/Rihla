@@ -18,7 +18,8 @@
 <canvas id="c"></canvas>
 <div id="hud">
   <div class="row"><b>Rihla · Parkour — prototype P0</b></div>
-  <div class="row">Déplacer : <b>WASD / ZQSD</b> · Sauter : <b>Espace</b> · Escalader un rebord : <b>avancer contre le mur</b></div>
+  <div class="row">Déplacer : <b>WASD / ZQSD</b> · Sauter : <b>Espace</b> · Franchir un rebord bas : <b>avancer contre le mur</b></div>
+  <div class="row"><b>Grimper un mur haut</b> : avance contre lui, puis <b>W/S</b> monter/descendre, <b>A/D</b> latéral, <b>Espace</b> sauter</div>
   <div class="row">Caméra : <b>glisser la souris</b> · Réinitialiser : <b>R</b></div>
 </div>
 <div id="dbg">chargement…</div>
@@ -198,7 +199,7 @@
 
     // ---------- État / entrées ----------
     const keys = new Set();
-    let grounded = false, vy = 0, heading = 0, moving = false, mx = 0, mz = 0, walkPhase = 0;
+    let grounded = false, vy = 0, heading = 0, moving = false, mx = 0, mz = 0, walkPhase = 0, climbing = null;
     let camYaw = 0, camPitch = 0.26, camDist = 7.0;
     let mantle = null, cooldown = 0;
 
@@ -227,7 +228,7 @@
     addEventListener('wheel', (e) => { camDist = Math.max(3.5, Math.min(12, camDist + e.deltaY * 0.004)); }, { passive: true });
 
     function resetChar() {
-      vy = 0; mantle = null; cooldown = 0;
+      vy = 0; mantle = null; cooldown = 0; climbing = null;
       body.setTranslation({ x: 0, y: CENTER_OFF + 0.05, z: 0 }, true);
     }
 
@@ -263,6 +264,23 @@
       vy = 0;
     }
 
+    function tryGrab(t) {
+      const f = { x: forward.x, z: forward.z };
+      const o1 = { x: t.x + f.x * 0.5, y: t.y + 0.05, z: t.z + f.z * 0.5 };
+      const wall = rayHit(o1, { x: f.x, y: 0, z: f.z }, 0.65);
+      if (!wall) return null;
+      const n = { x: -f.x, z: -f.z };
+      const faceDist = 0.5 + wall.toi;
+      const fx = t.x + f.x * faceDist, fz = t.z + f.z * faceDist;
+      const o2 = { x: fx - n.x * 0.35, y: t.y + 12, z: fz - n.z * 0.35 };
+      const roof = rayHit(o2, { x: 0, y: -1, z: 0 }, 24);
+      if (!roof) return null;
+      const topY = o2.y - roof.toi;
+      const feetY = t.y - CENTER_OFF;
+      if (topY - feetY < 1.0) return null;
+      return { fx, fz, normal: n, topY, y: t.y, u: 0, minY: CENTER_OFF + 0.05, grabTime: 0.2, tangent: { x: -n.z, z: n.x } };
+    }
+
     // ---------- Boucle ----------
     const camTarget = new T.Vector3();
     const V = new T.Vector3();
@@ -278,12 +296,17 @@
     function updateMeshAndCamera(dt) {
       const t = body.translation();
       bodyMesh.position.set(t.x, t.y - CENTER_OFF, t.z);
-      if (moving) heading = Math.atan2(mx, mz);
+      if (climbing) heading = Math.atan2(-climbing.normal.x, -climbing.normal.z);
+      else if (moving) heading = Math.atan2(mx, mz);
       bodyMesh.rotation.y += shortestAngle(bodyMesh.rotation.y, heading) * Math.min(1, dt * 14);
 
       const H = bodyMesh.userData;
       const mag = Math.min(1, Math.hypot(mx, mz));
-      if (grounded) {
+      if (climbing) {
+        H.legL.rotation.x = -0.5; H.legR.rotation.x = -0.5;
+        H.armL.rotation.x = -1.5; H.armR.rotation.x = -1.5;
+        H.head.rotation.x = 0.12;
+      } else if (grounded) {
         walkPhase += (mag * 4.8) * dt * 2.6;
         const sw = Math.sin(walkPhase) * 0.6 * mag;
         H.legL.rotation.x = sw; H.legR.rotation.x = -sw;
@@ -319,6 +342,36 @@
         function update(dt) {
       const t = body.translation();
 
+      // Escalade en cours : accroché au mur
+      if (climbing) {
+        const c = climbing;
+        const up = (keys.has('w') || keys.has('z') || keys.has('arrowup')) ? 1 : 0;
+        const dn = (keys.has('s') || keys.has('arrowdown')) ? 1 : 0;
+        const lf = (keys.has('a') || keys.has('q') || keys.has('arrowleft')) ? 1 : 0;
+        const rt = (keys.has('d') || keys.has('arrowright')) ? 1 : 0;
+        c.y += (up - dn) * 1.7 * dt;
+        c.u += (rt - lf) * 1.1 * dt;
+        c.u = Math.max(-1.4, Math.min(1.4, c.u));
+        c.y = Math.max(c.minY, c.y);
+        c.grabTime = Math.max(0, (c.grabTime || 0) - dt);
+        if (keys.has(' ') && c.grabTime <= 0) { climbing = null; vy = 4.6; world.step(); updateMeshAndCamera(dt); return; }
+        if (c.y + CENTER_OFF >= c.topY - 0.03) {
+          startMantle({ x: c.fx - c.normal.x * 0.55, y: c.topY + CENTER_OFF, z: c.fz - c.normal.z * 0.55 });
+          climbing = null;
+          world.step();
+          updateMeshAndCamera(dt);
+          return;
+        }
+        if (dn > 0 && c.y <= c.minY + 0.002) { climbing = null; vy = 0; world.step(); updateMeshAndCamera(dt); return; }
+        const px = c.fx + c.tangent.x * c.u + c.normal.x * 0.42;
+        const pz = c.fz + c.tangent.z * c.u + c.normal.z * 0.42;
+        body.setTranslation({ x: px, y: c.y, z: pz }, true);
+        dbg.textContent = `grimpe · ${(c.y - CENTER_OFF).toFixed(1)} / ${c.topY.toFixed(1)} m`;
+        world.step();
+        updateMeshAndCamera(dt);
+        return;
+      }
+
       // Mantle en cours : animation scriptée
       if (mantle) {
         mantle.t += dt;
@@ -347,11 +400,15 @@
       const mag = Math.min(1, ml);
       moving = ml > 0.1;
 
-      // Escalade
+      // Escalade / agrippement
       cooldown = Math.max(0, cooldown - dt);
-      if (grounded && fi > 0 && moving && cooldown <= 0) {
-        const target = tryMantle(t);
-        if (target) { startMantle(target); cooldown = 0.5; world.step(); updateMeshAndCamera(dt); return; }
+      if (fi > 0 && moving && cooldown <= 0) {
+        if (grounded) {
+          const target = tryMantle(t);
+          if (target) { startMantle(target); cooldown = 0.5; world.step(); updateMeshAndCamera(dt); return; }
+        }
+        const g = tryGrab(t);
+        if (g) { climbing = g; vy = 0; cooldown = 0.35; world.step(); updateMeshAndCamera(dt); return; }
       }
 
       if (keys.has(' ') && grounded) { vy = 5.6; grounded = false; }
