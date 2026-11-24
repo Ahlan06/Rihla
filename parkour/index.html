@@ -20,6 +20,8 @@
   #gauge .swoosh{fill:none;stroke:#e8e0cf;stroke-width:2.2;stroke-linecap:round;opacity:.8}
   #gauge .chev{fill:#ff4040;opacity:0;transition:opacity .15s}
   #gauge.alert .chev{opacity:1}
+  #gauge.alert .emblem{fill:#ff5555}
+  #gauge.alert .swoosh{stroke:#ff5555}
   #gauge.alert{animation:gpulse .55s infinite alternate}
   @keyframes gpulse{from{filter:drop-shadow(0 0 2px #f22)}to{filter:drop-shadow(0 0 10px #f44)}}
   #flash{position:fixed;left:50%;top:40%;transform:translate(-50%,-50%);font:700 42px Georgia;color:#ff5544;text-shadow:0 2px 10px #000;opacity:0;transition:opacity .2s;pointer-events:none}
