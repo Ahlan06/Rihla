@@ -200,6 +200,7 @@
     // ---------- État / entrées ----------
     const keys = new Set();
     let grounded = false, vy = 0, heading = 0, moving = false, mx = 0, mz = 0, walkPhase = 0, climbing = null;
+    let vx = 0, vz = 0, coyote = 0, jumpBuffer = 0, jumpQueued = false;
     let camYaw = 0, camPitch = 0.26, camDist = 7.0;
     let mantle = null, cooldown = 0;
 
@@ -208,6 +209,7 @@
     addEventListener('keydown', (e) => {
       const k = e.key.toLowerCase();
       if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' '].includes(k)) e.preventDefault();
+      if (k === ' ' && !keys.has(' ')) jumpQueued = true;
       keys.add(k);
       if (k === 'r') resetChar();
     });
@@ -228,7 +230,7 @@
     addEventListener('wheel', (e) => { camDist = Math.max(3.5, Math.min(12, camDist + e.deltaY * 0.004)); }, { passive: true });
 
     function resetChar() {
-      vy = 0; mantle = null; cooldown = 0; climbing = null;
+      vy = 0; mantle = null; cooldown = 0; climbing = null; vx = 0; vz = 0; coyote = 0; jumpBuffer = 0; jumpQueued = false;
       body.setTranslation({ x: 0, y: CENTER_OFF + 0.05, z: 0 }, true);
     }
 
@@ -261,13 +263,13 @@
     function startMantle(to) {
       const t = body.translation();
       mantle = { from: { x: t.x, y: t.y, z: t.z }, to, t: 0, dur: 0.26 };
-      vy = 0;
+      vy = 0; vx = 0; vz = 0;
     }
 
     function tryGrab(t) {
       const f = { x: forward.x, z: forward.z };
       const o1 = { x: t.x + f.x * 0.5, y: t.y + 0.05, z: t.z + f.z * 0.5 };
-      const wall = rayHit(o1, { x: f.x, y: 0, z: f.z }, 0.65);
+      const wall = rayHit(o1, { x: f.x, y: 0, z: f.z }, 0.8);
       if (!wall) return null;
       const n = { x: -f.x, z: -f.z };
       const faceDist = 0.5 + wall.toi;
@@ -301,14 +303,18 @@
       bodyMesh.rotation.y += shortestAngle(bodyMesh.rotation.y, heading) * Math.min(1, dt * 14);
 
       const H = bodyMesh.userData;
-      const mag = Math.min(1, Math.hypot(mx, mz));
+      const spd = Math.hypot(vx, vz);
       if (climbing) {
-        H.legL.rotation.x = -0.5; H.legR.rotation.x = -0.5;
-        H.armL.rotation.x = -1.5; H.armR.rotation.x = -1.5;
+        const cp = climbing.phase || 0;
+        H.legL.rotation.x = -0.5 + 0.22 * Math.sin(cp);
+        H.legR.rotation.x = -0.5 - 0.22 * Math.sin(cp);
+        H.armL.rotation.x = -1.5 + 0.2 * Math.sin(cp + 1.5);
+        H.armR.rotation.x = -1.5 - 0.2 * Math.sin(cp + 1.5);
         H.head.rotation.x = 0.12;
       } else if (grounded) {
-        walkPhase += (mag * 4.8) * dt * 2.6;
-        const sw = Math.sin(walkPhase) * 0.6 * mag;
+        walkPhase += spd * dt * 2.6;
+        const m = Math.min(1, spd / 4.8);
+        const sw = Math.sin(walkPhase) * 0.6 * m;
         H.legL.rotation.x = sw; H.legR.rotation.x = -sw;
         H.armL.rotation.x = -sw * 0.8; H.armR.rotation.x = sw * 0.8;
         H.head.rotation.x = 0.02 * Math.sin(walkPhase * 2);
@@ -336,7 +342,7 @@
       if (hit) d = Math.max(1.0, hit.toi - 0.3);
       camTarget.set(head.x + dir.x * d, head.y + dir.y * d, head.z + dir.z * d);
       camera.position.lerp(camTarget, 0.28);
-      camera.lookAt(t.x, t.y + 0.35, t.z);
+      camera.lookAt(t.x + vx * 0.05, t.y + 0.35, t.z + vz * 0.05);
     }
 
         function update(dt) {
@@ -349,10 +355,11 @@
         const dn = (keys.has('s') || keys.has('arrowdown')) ? 1 : 0;
         const lf = (keys.has('a') || keys.has('q') || keys.has('arrowleft')) ? 1 : 0;
         const rt = (keys.has('d') || keys.has('arrowright')) ? 1 : 0;
-        c.y += (up - dn) * 1.7 * dt;
-        c.u += (rt - lf) * 1.1 * dt;
+        c.y += (up - dn) * 2.1 * dt;
+        c.u += (rt - lf) * 1.4 * dt;
         c.u = Math.max(-1.4, Math.min(1.4, c.u));
         c.y = Math.max(c.minY, c.y);
+        c.phase = (c.phase || 0) + (Math.abs(up - dn) + Math.abs(rt - lf)) * dt * 7;
         c.grabTime = Math.max(0, (c.grabTime || 0) - dt);
         if (keys.has(' ') && c.grabTime <= 0) { climbing = null; vy = 4.6; world.step(); updateMeshAndCamera(dt); return; }
         if (c.y + CENTER_OFF >= c.topY - 0.03) {
@@ -408,14 +415,23 @@
           if (target) { startMantle(target); cooldown = 0.5; world.step(); updateMeshAndCamera(dt); return; }
         }
         const g = tryGrab(t);
-        if (g) { climbing = g; vy = 0; cooldown = 0.35; world.step(); updateMeshAndCamera(dt); return; }
+        if (g) { climbing = g; vy = 0; vx = 0; vz = 0; cooldown = 0.35; world.step(); updateMeshAndCamera(dt); return; }
       }
 
-      if (keys.has(' ') && grounded) { vy = 5.6; grounded = false; }
+      // Coyote time + jump buffer
+      if (jumpQueued) { jumpBuffer = 0.14; jumpQueued = false; } else { jumpBuffer = Math.max(0, jumpBuffer - dt); }
+      if (grounded) coyote = 0.1; else coyote = Math.max(0, coyote - dt);
+      if (jumpBuffer > 0 && coyote > 0) { vy = 6.0; grounded = false; coyote = 0; jumpBuffer = 0; }
       vy -= 18 * dt;
 
+      // Accélération / décélération (plus lente en l'air)
       const speed = 4.8;
-      const desired = { x: mx * speed * mag * dt, y: vy * dt, z: mz * speed * mag * dt };
+      const accel = grounded ? 16 : 6;
+      const k = Math.min(1, dt * accel);
+      vx += (mx * speed - vx) * k;
+      vz += (mz * speed - vz) * k;
+
+      const desired = { x: vx * dt, y: vy * dt, z: vz * dt };
       controller.computeColliderMovement(collider, desired);
       grounded = controller.computedGrounded();
       if (grounded && vy < 0) vy = 0;
@@ -425,7 +441,7 @@
       world.step();
       updateMeshAndCamera(dt);
 
-      dbg.textContent = `${grounded ? 'au sol' : 'en l’air'} · vy ${vy.toFixed(1)} · vitesse ${(mag * speed).toFixed(1)}`;
+      dbg.textContent = `${grounded ? 'au sol' : 'en l’air'} · vy ${vy.toFixed(1)} · vitesse ${Math.hypot(vx, vz).toFixed(1)}`;
     }
 
     updateMeshAndCamera(0.016);
@@ -438,6 +454,16 @@
       requestAnimationFrame(frame);
     }
     requestAnimationFrame(frame);
+
+    // Hook de debug/test (inoffensif)
+    window.__t = {
+      pos: () => body.translation(),
+      state: () => ({ grounded, climbing: !!climbing, vy, mantle: !!mantle }),
+      setCamYaw: (y) => { camYaw = y; },
+      setPos: (x, y, z) => body.setTranslation({ x, y, z }, true),
+      setKey: (k, down) => { if (down) { if (k === ' ' && !keys.has(' ')) jumpQueued = true; keys.add(k); } else keys.delete(k); },
+      reset: resetChar,
+    };
   } catch (e) {
     dbg.textContent = 'Erreur : ' + e.message;
     console.error(e);
