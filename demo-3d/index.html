@@ -1004,7 +1004,7 @@ function buildMedina() {
     batch.castShadow=batch.receiveShadow=true;scene.add(batch);
   }
   return {
-    extensionRoads,
+    extensionRoads, addFace,
     cameraObstacles(x,z,reach,nearby){
       nearby.clear();
       for(let ix=Math.floor((x-reach)/12);ix<=Math.floor((x+reach)/12);ix++)
@@ -1081,17 +1081,25 @@ oval(rider,0x221e23,0,1.09,-.045,.202,.036,.201);
 const walker=group(scene), walkingBody=group(walker,0,.85,0);
 walker.visible=false;
 sculpt(walkingBody,0xf3edde,[[-.59,.24,.18,.02],[-.43,.235,.17,.02],[-.12,.20,.15,.01],[.16,.17,.13,0],[.36,.20,.14,0],[.48,.22,.13,0],[.52,.12,.10,0]],false,.04);
-const wrappedHead=group(walkingBody,0,-.08,0);
-wrappedHead.scale.setScalar(.78);
-for(const detail of rider.children.slice(-4))wrappedHead.add(detail.clone());
+const walkingHead=group(walkingBody,0,.56,-.018);
+const features=group(walkingHead);
+features.rotation.y=Math.PI;
+features.scale.setScalar(1.13);
+medina.addFace(features,2);
+const headdress=sculpt(walkingHead,0xffffff,[[.144,.111,.111,.003],[.174,.13,.122,.008],[.212,.125,.116,.01],[.245,.082,.079,.013],[.25,.015,.02,.013]],false,.02);
+headdress.material.map=scarf;
+const drape=sculpt(walkingHead,0xffffff,[[-.15,.16,.048,.105],[-.03,.142,.058,.094],[.097,.123,.07,.074],[.19,.119,.074,.054]],false,.048);
+drape.material.map=scarf;
+oval(walkingHead,0x262329,0,.184,.01,.132,.018,.126);
+oval(walkingBody,0x916347,0,.53,0,.077,.073,.072);
 const limbs=[-1,1].map(side=>{
   const hip=group(walkingBody,side*.105,-.12,0),knee=group(hip,0,-.34,0);
   oval(hip,0xdfd9cb,0,-.17,0,.085,.19,.086);
   oval(knee,0xcac1af,0,-.15,0,.067,.16,.066);
   oval(knee,0x554035,0,-.33,-.04,.074,.06,.13);
   const shoulder=group(walkingBody,side*.197,.43,0),elbow=group(shoulder,0,-.245,0);
-  oval(shoulder,0xeee7da,0,-.11,0,.081,.156,.087);
-  oval(elbow,0xe4ded1,0,-.10,0,.067,.143,.072);
+  sculpt(shoulder,0xeee7da,[[-.255,.064,.067,.002],[-.18,.075,.073,.004],[-.077,.084,.082,.004],[.015,.077,.078,0],[.054,.04,.044,0]],false,.036);
+  sculpt(elbow,0xe4ded1,[[-.218,.052,.051,0],[-.19,.056,.056,.003],[-.105,.067,.065,.007],[-.028,.072,.068,.008],[.025,.055,.052,.003]],false,.04);
   oval(elbow,0xa77a58,0,-.235,0,.045,.074,.047);
   return {hip,knee,shoulder,elbow,side};
 });
@@ -1268,7 +1276,7 @@ function followRider(dt,z,ground,onFoot=0,x=lateral){
   cameraHeading=reset?yaw:cameraHeading+yawError*(1-Math.exp(-8*dt));
   const sn=Math.sin(cameraHeading), cs=Math.cos(cameraHeading);
   const portrait=1-T.MathUtils.smoothstep(camera.aspect,.6,1.45);
-  const depth=6.7+portrait*1.35-onFoot*3.6;
+  const depth=6.7+portrait*1.35-onFoot*2.8;
   const lift=3.95+portrait*.85-onFoot*1.85;
   const vault=free?(1-T.MathUtils.smoothstep(Math.abs(x),3.3,4.2))*T.MathUtils.smoothstep(-z,159,165)*(1-T.MathUtils.smoothstep(-z,169,173)):0;
   pivot.set(x,ground+jump+3.23-1.78*onFoot,z);
@@ -1296,7 +1304,7 @@ function followRider(dt,z,ground,onFoot=0,x=lateral){
   const close=1-T.MathUtils.smoothstep(boomLength,.45,2.2);
   root.visible=!!parked||boomLength>.82;
   if(parked)walker.visible=boomLength>.55;
-  camera.lookAt(x-sn*3.5,ground+jump*.65+1.65-.39*onFoot+(1.63-1.44*onFoot)*close+3.5*Math.tan(lookPitch),z-cs*3.5);
+  camera.lookAt(x-sn*3.5,ground+jump*.65+1.65-.75*onFoot+(1.63-1.44*onFoot)*close+3.5*Math.tan(lookPitch),z-cs*3.5);
 }
 // Fixed pools keep footprints and windblown sand bounded during long rides.
 const marks=new T.InstancedMesh(new T.CircleGeometry(1,8),new T.MeshBasicMaterial({color:0x916b52,side:T.DoubleSide}),384);
