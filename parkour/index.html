@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Rihla · Parkour (P0)</title>
+<style>
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:#0b0a14;overflow:hidden;font:14px system-ui}
+  canvas{display:block;width:100vw;height:100dvh;image-rendering:pixelated}
+  #hud{position:fixed;left:14px;top:14px;right:14px;color:#e8e0cf;text-shadow:0 1px 3px #000;pointer-events:none}
+  #hud b{color:#ffd27a}
+  #hud .row{margin:2px 0}
+  #dbg{position:fixed;right:14px;bottom:12px;font:12px monospace;color:#9fb6d8;text-shadow:0 1px 2px #000;pointer-events:none;text-align:right}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hud">
+  <div class="row"><b>Rihla · Parkour — prototype P0</b></div>
+  <div class="row">Déplacer : <b>WASD / ZQSD</b> · Sauter : <b>Espace</b> · Escalader un rebord : <b>avancer contre le mur</b></div>
+  <div class="row">Caméra : <b>glisser la souris</b> · Réinitialiser : <b>R</b></div>
+</div>
+<div id="dbg">chargement…</div>
+<script type="module">
+(async () => {
+  const dbg = document.getElementById('dbg');
+  try {
+    const T = await import('https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js');
+    const RAPIER = await import('https://cdn.jsdelivr.net/npm/@dimforge/rapier3d-compat@0.21.0/dist/rapier.mjs');
+    await RAPIER.init();
+
+    // ---------- Renderer / scène ----------
+    const canvas = document.getElementById('c');
+    const renderer = new T.WebGLRenderer({ canvas, antialias: false });
+    renderer.setPixelRatio(1);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = T.PCFSoftShadowMap;
+
+    const scene = new T.Scene();
+    scene.background = new T.Color(0x8fb2e0);
+    scene.fog = new T.Fog(0x8fb2e0, 38, 120);
+
+    const camera = new T.PerspectiveCamera(60, 1, 0.1, 300);
+
+    function resize() {
+      const scale = Math.min(1, 300 / innerHeight, 520 / innerWidth);
+      renderer.setSize(Math.round(innerWidth * scale), Math.round(innerHeight * scale), false);
+      camera.aspect = innerWidth / innerHeight;
+      camera.updateProjectionMatrix();
+    }
+    resize();
+    addEventListener('resize', resize);
+
+    // ---------- Lumières ----------
+    scene.add(new T.HemisphereLight(0xcfe0ff, 0x6a4a2a, 1.1));
+    const sun = new T.DirectionalLight(0xfff0d8, 2.4);
+    sun.position.set(14, 22, 10);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(1024, 1024);
+    Object.assign(sun.shadow.camera, { left: -24, right: 24, top: 24, bottom: -24, far: 90 });
+    sun.shadow.camera.updateProjectionMatrix();
+    scene.add(sun, sun.target);
+
+    // ---------- Monde Rapier ----------
+    const world = new RAPIER.World({ x: 0, y: -18, z: 0 });
+
+    const groundMesh = new T.Mesh(
+      new T.BoxGeometry(70, 1, 70),
+      new T.MeshStandardMaterial({ color: 0xc69a6b, roughness: 0.95 }),
+    );
+    groundMesh.position.y = -0.5;
+    groundMesh.receiveShadow = true;
+    scene.add(groundMesh);
+    world.createCollider(RAPIER.ColliderDesc.cuboid(35, 0.5, 35).setTranslation(0, -0.5, 0));
+
+    const grid = new T.GridHelper(70, 70, 0x000000, 0x000000);
+    grid.material.opacity = 0.08;
+    grid.material.transparent = true;
+    grid.position.y = 0.01;
+    scene.add(grid);
+
+    function addBox(x, y, z, w, h, d, color) {
+      const mesh = new T.Mesh(new T.BoxGeometry(w, h, d), new T.MeshStandardMaterial({ color, roughness: 0.9 }));
+      mesh.position.set(x, y, z);
+      mesh.castShadow = mesh.receiveShadow = true;
+      scene.add(mesh);
+      world.createCollider(RAPIER.ColliderDesc.cuboid(w / 2, h / 2, d / 2).setTranslation(x, y, z));
+      return mesh;
+    }
+
+    // Obstacles : marche, saut, rebord à escalader, mur haut, rampe.
+    addBox(3, 0.2, -3, 2.2, 0.4, 2.2, 0xb08858);      // marche (0.4)
+    addBox(6.4, 0.45, -3, 2.2, 0.9, 2.2, 0xa47d52);   // saut (0.9)
+    addBox(-3, 0.8, -4.2, 2.6, 1.6, 2.6, 0xb08858);   // rebord à escalader (1.6)
+    addBox(-5.2, 1.5, -0.5, 1.2, 3.0, 6.0, 0x7d6348); // mur haut (3.0) — bloque
+    addBox(9.5, 1.4, -8, 6, 2.8, 6, 0x8a6a4a);        // gros bloc (2.8)
+
+    // Rampe inclinée
+    {
+      const ramp = new T.Mesh(new T.BoxGeometry(3.2, 0.2, 8), new T.MeshStandardMaterial({ color: 0x9a7a52, roughness: 0.9 }));
+      ramp.position.set(-9, 1.0, -6);
+      ramp.rotation.x = -0.32;
+      ramp.castShadow = ramp.receiveShadow = true;
+      scene.add(ramp);
+      const q = { x: Math.sin(-0.16), y: 0, z: 0, w: Math.cos(-0.16) };
+      world.createCollider(RAPIER.ColliderDesc.cuboid(1.6, 0.1, 4).setTranslation(-9, 1.0, -6).setRotation(q));
+    }
+
+    // ---------- Personnage ----------
+    const R = 0.35, HH = 0.5, CENTER_OFF = HH + R; // 0.85
+    const body = world.createRigidBody(
+      RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(0, CENTER_OFF + 0.05, 0),
+    );
+    const collider = world.createCollider(RAPIER.ColliderDesc.capsule(HH, R), body);
+    const controller = world.createCharacterController(0.02);
+    controller.setUp({ x: 0, y: 1, z: 0 });
+    controller.enableAutostep(0.42, 0.2, true);
+    controller.enableSnapToGround(0.4);
+    controller.setMaxSlopeClimbAngle(48 * Math.PI / 180);
+    controller.setMinSlopeSlideAngle(35 * Math.PI / 180);
+
+    const bodyMesh = new T.Group();
+    const capsule = new T.Mesh(
+      new T.CapsuleGeometry(R, HH * 2, 6, 14),
+      new T.MeshStandardMaterial({ color: 0x8a6a4a, roughness: 0.75 }),
+    );
+    capsule.castShadow = true;
+    bodyMesh.add(capsule);
+    const visor = new T.Mesh(
+      new T.BoxGeometry(0.24, 0.12, 0.1),
+      new T.MeshStandardMaterial({ color: 0xffd27a, emissive: 0x4a2800 }),
+    );
+    visor.position.set(0, 0.42, 0.36);
+    bodyMesh.add(visor);
+    scene.add(bodyMesh);
+
+    // ---------- État / entrées ----------
+    const keys = new Set();
+    let grounded = false, vy = 0, heading = 0, moving = false, mx = 0, mz = 0;
+    let camYaw = 0, camPitch = 0.26, camDist = 7.0;
+    let mantle = null, cooldown = 0;
+
+    const forward = { x: 0, z: 0 }, right = { x: 0, z: 0 };
+
+    addEventListener('keydown', (e) => {
+      const k = e.key.toLowerCase();
+      if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' '].includes(k)) e.preventDefault();
+      keys.add(k);
+      if (k === 'r') resetChar();
+    });
+    addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
+    addEventListener('blur', () => keys.clear());
+
+    // Caméra : glisser
+    let dragging = false, lx = 0, ly = 0;
+    canvas.addEventListener('pointerdown', (e) => { dragging = true; lx = e.clientX; ly = e.clientY; canvas.setPointerCapture(e.pointerId); });
+    canvas.addEventListener('pointermove', (e) => {
+      if (!dragging) return;
+      camYaw -= (e.clientX - lx) * 0.006;
+      camPitch = Math.max(-0.15, Math.min(0.95, camPitch + (e.clientY - ly) * 0.004));
+      lx = e.clientX; ly = e.clientY;
+    });
+    canvas.addEventListener('pointerup', () => { dragging = false; });
+    canvas.addEventListener('pointercancel', () => { dragging = false; });
+    addEventListener('wheel', (e) => { camDist = Math.max(3.5, Math.min(12, camDist + e.deltaY * 0.004)); }, { passive: true });
+
+    function resetChar() {
+      vy = 0; mantle = null; cooldown = 0;
+      body.setTranslation({ x: 0, y: CENTER_OFF + 0.05, z: 0 }, true);
+    }
+
+    // ---------- Escalade (mantle) ----------
+    function rayHit(origin, dir, maxToi) {
+      const h = world.castRay(new RAPIER.Ray(origin, dir), maxToi, true);
+      if (!h) return null;
+      const toi = (h.timeOfImpact !== undefined) ? h.timeOfImpact : h.toi;
+      return { toi };
+    }
+
+    function tryMantle(t) {
+      const f = { x: forward.x, z: forward.z };
+      const o1 = { x: t.x + f.x * 0.5, y: t.y + 0.05, z: t.z + f.z * 0.5 };
+      const wall = rayHit(o1, { x: f.x, y: 0, z: f.z }, 0.65);
+      if (!wall) return null;
+      const faceDist = 0.5 + wall.toi;
+      const ox = t.x + f.x * (faceDist + 0.18);
+      const oz = t.z + f.z * (faceDist + 0.18);
+      const o2 = { x: ox, y: t.y + 1.95, z: oz };
+      const ledge = rayHit(o2, { x: 0, y: -1, z: 0 }, 2.7);
+      if (!ledge) return null;
+      const ledgeY = o2.y - ledge.toi;
+      const feetY = t.y - CENTER_OFF;
+      const rel = ledgeY - feetY;
+      if (rel < 0.35 || rel > 1.95) return null;
+      return { x: t.x + f.x * (faceDist + 0.5), y: ledgeY + CENTER_OFF, z: t.z + f.z * (faceDist + 0.5) };
+    }
+
+    function startMantle(to) {
+      const t = body.translation();
+      mantle = { from: { x: t.x, y: t.y, z: t.z }, to, t: 0, dur: 0.26 };
+      vy = 0;
+    }
+
+    // ---------- Boucle ----------
+    const camTarget = new T.Vector3();
+    const V = new T.Vector3();
+    let last = performance.now();
+
+    function shortestAngle(a, b) {
+      let d = (b - a) % (Math.PI * 2);
+      if (d > Math.PI) d -= Math.PI * 2;
+      if (d < -Math.PI) d += Math.PI * 2;
+      return d;
+    }
+
+    function updateMeshAndCamera(dt) {
+      const t = body.translation();
+      bodyMesh.position.set(t.x, t.y, t.z);
+      if (moving) heading = Math.atan2(mx, mz);
+      bodyMesh.rotation.y += shortestAngle(bodyMesh.rotation.y, heading) * Math.min(1, dt * 14);
+
+      const targetYaw = camYaw;
+      forward.x = -Math.sin(targetYaw);
+      forward.z = -Math.cos(targetYaw);
+      right.x = Math.cos(targetYaw);
+      right.z = -Math.sin(targetYaw);
+
+      const head = { x: t.x, y: t.y + 0.9, z: t.z };
+      const cx = t.x + Math.sin(camYaw) * camDist * Math.cos(camPitch);
+      const cy = t.y + 1.0 + camDist * Math.sin(camPitch);
+      const cz = t.z + Math.cos(camYaw) * camDist * Math.cos(camPitch);
+      let dx = cx - head.x, dy = cy - head.y, dz = cz - head.z;
+      let dist = Math.hypot(dx, dy, dz);
+      if (dist < 0.001) { dx = 0; dy = 1; dz = 0; dist = 1; }
+      const dir = { x: dx / dist, y: dy / dist, z: dz / dist };
+      const hit = rayHit(head, dir, dist);
+      let d = dist;
+      if (hit) d = Math.max(1.0, hit.toi - 0.3);
+      camTarget.set(head.x + dir.x * d, head.y + dir.y * d, head.z + dir.z * d);
+      camera.position.lerp(camTarget, 0.28);
+      camera.lookAt(t.x, t.y + 0.35, t.z);
+    }
+
+        function update(dt) {
+      const t = body.translation();
+
+      // Mantle en cours : animation scriptée
+      if (mantle) {
+        mantle.t += dt;
+        const k = Math.min(1, mantle.t / mantle.dur);
+        const e = k * k * (3 - 2 * k);
+        body.setTranslation({
+          x: mantle.from.x + (mantle.to.x - mantle.from.x) * e,
+          y: mantle.from.y + (mantle.to.y - mantle.from.y) * e,
+          z: mantle.from.z + (mantle.to.z - mantle.from.z) * e,
+        }, true);
+        if (k >= 1) mantle = null;
+        world.step();
+        updateMeshAndCamera(dt);
+        return;
+      }
+
+      const fi = ((keys.has('w') || keys.has('z') || keys.has('arrowup')) ? 1 : 0)
+        - ((keys.has('s') || keys.has('arrowdown')) ? 1 : 0);
+      const ri = ((keys.has('d') || keys.has('arrowright')) ? 1 : 0)
+        - ((keys.has('a') || keys.has('q') || keys.has('arrowleft')) ? 1 : 0);
+
+      mx = forward.x * fi + right.x * ri;
+      mz = forward.z * fi + right.z * ri;
+      const ml = Math.hypot(mx, mz);
+      if (ml > 1) { mx /= ml; mz /= ml; }
+      const mag = Math.min(1, ml);
+      moving = ml > 0.1;
+
+      // Escalade
+      cooldown = Math.max(0, cooldown - dt);
+      if (grounded && fi > 0 && moving && cooldown <= 0) {
+        const target = tryMantle(t);
+        if (target) { startMantle(target); cooldown = 0.5; world.step(); updateMeshAndCamera(dt); return; }
+      }
+
+      if (keys.has(' ') && grounded) { vy = 5.6; grounded = false; }
+      vy -= 18 * dt;
+
+      const speed = 4.8;
+      const desired = { x: mx * speed * mag * dt, y: vy * dt, z: mz * speed * mag * dt };
+      controller.computeColliderMovement(collider, desired);
+      grounded = controller.computedGrounded();
+      if (grounded && vy < 0) vy = 0;
+      const mv = controller.computedMovement();
+      body.setNextKinematicTranslation({ x: t.x + mv.x, y: t.y + mv.y, z: t.z + mv.z });
+
+      world.step();
+      updateMeshAndCamera(dt);
+
+      dbg.textContent = `${grounded ? 'au sol' : 'en l’air'} · vy ${vy.toFixed(1)} · vitesse ${(mag * speed).toFixed(1)}`;
+    }
+
+    updateMeshAndCamera(0.016);
+
+    function frame(now) {
+      const dt = Math.min(0.033, (now - last) / 1000);
+      last = now;
+      update(dt);
+      renderer.render(scene, camera);
+      requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+  } catch (e) {
+    dbg.textContent = 'Erreur : ' + e.message;
+    console.error(e);
+  }
+})();
+</script>
+</body>
+</html>
