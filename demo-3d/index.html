@@ -54,7 +54,18 @@ function oval(p,c,x,y,z,a,b,d){const m=mesh(p,sphere,c,x,y,z);m.scale.set(a,b,d)
 const ridgeRoute=new T.CatmullRomCurve3([[22,-148],[33,-148],[41,-144],[47,-133],[49,-114],[48,-94],[44,-76],[37,-61],[26,-50],[20,-39],[12,-33]].map(([x,z])=>new T.Vector3(x,0,z)));
 const discoveryRoute=new T.CatmullRomCurve3([[0,-22],[12,-23],[29,-26],[47,-24],[60,-37],[75,-51],[86,-63],[99,-72],[109,-89],[97,-104],[74,-110],[49,-114]].map(([x,z])=>new T.Vector3(x,0,z)));
 const peaks=[[107,-121,16,14],[129,-106,23,19],[134,-82,15,13],[92,-133,12,12]];
-function height(x,z){const ridge=3.8*Math.exp(-((x-48)**2)/86-((z+105)**2)/880);const edge=Math.max(Math.abs(x)-38,-z-182,z+84,0);const blend=Math.min(1,edge/12);const rise=3.2*T.MathUtils.smoothstep(-x,23,35)*(1-T.MathUtils.smoothstep(-x,48,57))*T.MathUtils.smoothstep(-z,108,135)*(1-T.MathUtils.smoothstep(-z,155,169));const basin=Math.hypot((x-51)/7,(z+14)/4.8);
+const oasisX=55, oasisZ=-10, oasisRadiusX=19, oasisRadiusZ=11;
+function riverCenter(x){
+  const d=x-oasisX;
+  return oasisZ+7*Math.sin(d*.069)+d*.13;
+}
+function riverWidth(x){return 4.8+1.1*Math.sin((x-oasisX)*.092)}
+function waterDistance(x,z){
+  const lake=Math.hypot((x-oasisX)/oasisRadiusX,(z-oasisZ)/oasisRadiusZ);
+  if(x<oasisX)return lake;
+  return Math.min(lake,Math.abs(z-riverCenter(x))/riverWidth(x));
+}
+function height(x,z){const ridge=3.8*Math.exp(-((x-48)**2)/86-((z+105)**2)/880);const edge=Math.max(Math.abs(x)-38,-z-182,z+84,0);const blend=Math.min(1,edge/12);const rise=3.2*T.MathUtils.smoothstep(-x,23,35)*(1-T.MathUtils.smoothstep(-x,48,57))*T.MathUtils.smoothstep(-z,108,135)*(1-T.MathUtils.smoothstep(-z,155,169));const basin=waterDistance(x,z);
  const relief=peaks.reduce((sum,[px,pz,h,w])=>sum+h*Math.max(0,1-Math.hypot(x-px,(z-pz)*.83)/w)**1.35,0);
  const natural=relief+rise+ridge+blend*blend*(3-2*blend)*( 2.6*Math.sin(z*.065+.48*Math.sin(x*.09))+1.1*Math.sin(z*.13+x*.07)+2.2*Math.sin(x*.13+z*.025));return T.MathUtils.lerp(-1.2+Math.min(1.6,basin)*.95,natural,T.MathUtils.smoothstep(basin,1,2.1))}
 const land=new T.PlaneGeometry(300,360,180,240);land.rotateX(-Math.PI/2);land.translate(0,0,-95);
@@ -957,9 +968,59 @@ function buildMedina() {
     add(dome,x,15.5,-170,1,1.6,1,0xb38862);
   }
   // The eastern trail skirts the water, passes through a hamlet and enters a ruined gateway.
-  const water=new T.Mesh(new T.CircleGeometry(1,40),new T.ShaderMaterial({uniforms:waterUniforms,vertexShader:'varying vec3 vWorld;void main(){vec4 wp=modelMatrix*vec4(position,1.0);vWorld=wp.xyz;gl_Position=projectionMatrix*viewMatrix*wp;}',fragmentShader:'uniform float uTime;uniform vec3 uSky;uniform vec3 uDeep;varying vec3 vWorld;void main(){vec3 vd=normalize(cameraPosition-vWorld);float fres=pow(1.0-clamp(abs(vd.y),0.0,1.0),2.2);float r=sin(vWorld.x*1.5+uTime*1.3)*sin(vWorld.z*2.1-uTime*1.0);vec3 col=mix(uDeep,uSky,fres*0.9);col+=vec3(0.12,0.2,0.26)*r*0.35;float sp=smoothstep(0.9,1.0,r*0.5+0.5);col+=vec3(0.7,0.85,1.0)*sp*0.5;gl_FragColor=vec4(col,1.0);}'}));
-  water.rotation.x=-Math.PI/2;water.scale.set(7,4.8,1);water.position.set(51,-.26,-14);scene.add(water);
-  for(const [x,z,h] of [[45,-17,6],[55,-10,7],[58,-15,5],[47,-9,5]]){
+  const riverVertices=[],riverIndices=[];
+  for(let x=oasisX-oasisRadiusX;x<=150;x+=.5){
+    const half=oasisRadiusZ*Math.sqrt(Math.max(0,1-((x-oasisX)/oasisRadiusX)**2));
+    let low=oasisZ-half,high=oasisZ+half;
+    if(x>=oasisX){
+      const center=riverCenter(x),width=riverWidth(x);
+      low=half?Math.min(low,center-width):center-width;
+      high=half?Math.max(high,center+width):center+width;
+    }
+    const i=riverVertices.length/3;
+    riverVertices.push(x,-.26,low,x,-.26,high);
+    if(i)riverIndices.push(i-2,i-1,i,i,i-1,i+1);
+  }
+  const waterShape=new T.BufferGeometry();
+  waterShape.setAttribute('position',new T.Float32BufferAttribute(riverVertices,3));
+  waterShape.setIndex(riverIndices);
+  const water=new T.Mesh(waterShape,new T.ShaderMaterial({uniforms:waterUniforms,vertexShader:'varying vec3 vWorld;void main(){vec4 wp=modelMatrix*vec4(position,1.0);vWorld=wp.xyz;gl_Position=projectionMatrix*viewMatrix*wp;}',fragmentShader:'uniform float uTime;uniform vec3 uSky;uniform vec3 uDeep;varying vec3 vWorld;void main(){vec3 vd=normalize(cameraPosition-vWorld);float fres=pow(1.0-clamp(abs(vd.y),0.0,1.0),2.2);float r=sin(vWorld.x*.65+sin(vWorld.z*.34)+uTime*.8)*sin(vWorld.z*3.7+sin(vWorld.x*.46)-uTime*1.2);vec3 col=mix(uDeep,uSky,fres*0.9);col+=vec3(0.12,0.2,0.26)*r*0.35;float sp=smoothstep(0.9,1.0,r*0.5+0.5);col=mix(col,uDeep*1.7,0.55);col+=vec3(0.18,0.32,0.32)*sp*0.18;gl_FragColor=vec4(col,1.0);}'}));
+  scene.add(water);
+  function crocodile(index){
+    const animal=group(scene), hide=0x526047, ridge=0x36452f;
+    oval(animal,hide,0,0,0,.39,.22,.96);
+    oval(animal,hide,0,.03,-.94,.285,.17,.43);
+    oval(animal,0x566049,0,-.005,-1.36,.205,.095,.39);
+    for(const side of [-1,1]){
+      oval(animal,ridge,side*.19,.157,-1.07,.074,.068,.105);
+      oval(animal,0xd0ab52,side*.22,.19,-1.105,.03,.023,.027);
+      for(const z of [-.55,.52]){
+        const leg=oval(animal,hide,side*.36,-.095,z,.20,.07,.10);
+        leg.rotation.y=side*.5;
+      }
+      for(let j=0;j<5;j++)oval(animal,ridge,side*.12,.18,.47-j*.20,.064,.063,.12);
+    }
+    const tail=[];
+    let joint=animal;
+    for(let j=0;j<4;j++){
+      joint=group(joint,0,0,j===0?.67:.34);
+      const radius=.24-j*.055;
+      oval(joint,hide,0,-.025,.17,radius,radius*.72,.29);
+      tail.push(joint);
+    }
+    return t=>{
+      const phase=t*(.11+index*.015)+index*2;
+      const x=index===2?92+9*Math.sin(phase):oasisX+(index?7:11)*Math.cos(phase);
+      const z=index===2?riverCenter(x)+1.1*Math.cos(phase):oasisZ+(index?3:6)*Math.sin(phase);
+      const dx=index===2?9*Math.cos(phase):-(index?7:11)*Math.sin(phase);
+      const dz=index===2?(riverCenter(x+.1)-riverCenter(x-.1))*5*dx-1.1*Math.sin(phase):(index?3:6)*Math.cos(phase);
+      animal.position.set(x,-.31+.021*Math.sin(t*1.3+index),z);
+      animal.rotation.y=Math.atan2(-dx,-dz);
+      tail.forEach((part,j)=>part.rotation.y=.20*Math.sin(t*2.1+index-j*.62));
+    };
+  }
+  const animateCrocodiles=[0,1,2].map(crocodile);
+  for(const [x,z,h] of [[36,-13,6],[44,-21,7],[62,-22,5],[42,1,5],[58,4,6],[81,riverCenter(81)+riverWidth(81)+2,5],[103,riverCenter(103)-riverWidth(103)-2,5],[124,riverCenter(124)+riverWidth(124)+2,6]]){
     const y=height(x,z);add(column,x,y+h/2,z,.43,h,.43,0x846445);bounds.push([x,z,.46,.46]);
     for(let i=0;i<9;i++){
       const a=i*2.4;const leaf=oval(scene,i%2?0x526742:0x617e4e,x+1.18*Math.sin(a),y+h-.26,z+1.18*Math.cos(a),.39,.13,1.65);
@@ -1013,8 +1074,8 @@ function buildMedina() {
           if(cell)for(const object of cell)nearby.add(object);
         }
     },
-    blocked(x,z){return bounds.some(([cx,cz,w,d])=>Math.abs(x-cx)<w&&Math.abs(z-cz)<d)},
-    animate(t){animatePotter?.(t);townsfolk.forEach(({p,torso,head,arm,feet,x,z,merchant},i)=>{
+    blocked(x,z){return waterDistance(x,z)<.87||bounds.some(([cx,cz,w,d])=>Math.abs(x-cx)<w&&Math.abs(z-cz)<d)},
+    animate(t){for(const swim of animateCrocodiles)swim(t);animatePotter?.(t);townsfolk.forEach(({p,torso,head,arm,feet,x,z,merchant},i)=>{
       const phase=t*.45+i;
       head.rotation.y=.18*Math.sin(phase*.73+i);head.rotation.x=.035*Math.cos(phase);
       if(merchant){arm.rotation.x=-.8+.55*Math.sin(t*1.8+i);p.rotation.y=x>0?-Math.PI/2:Math.PI/2;return}
@@ -1222,6 +1283,9 @@ function paintMap(){
  for(const [x,z] of [[-34,-75],[65,-151],[83,-169]]){const px=(x+150)*.4,py=(z+275)*.4;map.beginPath();map.moveTo(px,py-4);map.lineTo(px-4,py+3);map.lineTo(px+4,py+3);map.fill()}
  map.beginPath();for(let i=0;i<=32;i++){const p=ridgeRoute.getPointAt(i/32);const mx=(p.x+150)*.4,my=(p.z+275)*.4;if(i===0)map.moveTo(mx,my);else map.lineTo(mx,my)}
  map.strokeStyle='#dcab79';map.lineWidth=1.6;map.stroke();
+ map.fillStyle='#69adab';map.beginPath();map.ellipse((oasisX+150)*.4,(oasisZ+275)*.4,oasisRadiusX*.4,oasisRadiusZ*.4,0,0,2*Math.PI);map.fill();
+ map.beginPath();for(let x=oasisX;x<=150;x+=2){const px=(x+150)*.4,py=(riverCenter(x)+275)*.4;if(x===oasisX)map.moveTo(px,py);else map.lineTo(px,py)}map.strokeStyle='#69adab';map.lineWidth=3.5;map.stroke();
+ map.strokeStyle='#dcab79';map.lineWidth=1.6;
  if(parked){map.fillStyle='#ffe3a3';map.fillRect((parked.x+150)*.4-2,(parked.z+275)*.4-2,4,4)}
  map.beginPath();for(let j=0;j<=48;j++){const p=discoveryRoute.getPointAt(j/48),x=(p.x+150)*.4,y=(p.z+275)*.4;if(j)map.lineTo(x,y);else map.moveTo(x,y)}map.stroke();
  for(const [x,z,color] of [[51,-14,'#69cdbe'],[78,-55,'#ece0b8'],[109,-89,'#be976d'],[129,-106,'#cbb7ad']]){map.fillStyle=color;map.fillRect((x+150)*.4-1.5,(z+275)*.4-1.5,3,3)}
