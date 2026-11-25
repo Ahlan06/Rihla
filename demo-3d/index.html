@@ -68,19 +68,26 @@ function waterDistance(x,z){
 function height(x,z){const ridge=3.8*Math.exp(-((x-48)**2)/86-((z+105)**2)/880);const edge=Math.max(Math.abs(x)-38,-z-182,z+84,0);const blend=Math.min(1,edge/12);const rise=3.2*T.MathUtils.smoothstep(-x,23,35)*(1-T.MathUtils.smoothstep(-x,48,57))*T.MathUtils.smoothstep(-z,108,135)*(1-T.MathUtils.smoothstep(-z,155,169));const basin=waterDistance(x,z);
  const relief=peaks.reduce((sum,[px,pz,h,w])=>sum+h*Math.max(0,1-Math.hypot(x-px,(z-pz)*.83)/w)**1.35,0);
  const natural=relief+rise+ridge+blend*blend*(3-2*blend)*( 2.6*Math.sin(z*.065+.48*Math.sin(x*.09))+1.1*Math.sin(z*.13+x*.07)+2.2*Math.sin(x*.13+z*.025));return T.MathUtils.lerp(-1.2+Math.min(1.6,basin)*.95,natural,T.MathUtils.smoothstep(basin,1,2.1))}
+function terrainMaterial(tile,relief){
+  const texture=new T.TextureLoader().load('textures/'+tile+'.png');
+  texture.wrapS=texture.wrapT=T.RepeatWrapping;
+  texture.anisotropy=Math.min(4,renderer.capabilities.getMaxAnisotropy());
+  // Linear grayscale modulates the sand tint and supplies the height field.
+  return new T.MeshStandardMaterial({vertexColors:true,map:texture,bumpMap:texture,bumpScale:relief,roughness:.97});
+}
+const drySand=terrainMaterial('dune-ripples',.052);
+const packedTrail=terrainMaterial('trail-grit',.027);
+packedTrail.side=T.DoubleSide;
 const land=new T.PlaneGeometry(300,360,180,240);land.rotateX(-Math.PI/2);land.translate(0,0,-95);
 const pos=land.attributes.position,colors=[];
-for(let i=0;i<pos.count;i++){const x=pos.getX(i),z=pos.getZ(i);pos.setY(i,height(x,z));const c=new T.Color().setRGB(.54,.315,.195).multiplyScalar(.96+.04*Math.sin(x*7+z*2)+.025*Math.cos(z*9));colors.push(c.r,c.g,c.b)}
-land.setAttribute('color',new T.Float32BufferAttribute(colors,3));land.computeVertexNormals();const dunes=new T.Mesh(land,new T.MeshStandardMaterial({vertexColors:true}));dunes.receiveShadow=true;scene.add(dunes);
+for(let i=0;i<pos.count;i++){const x=pos.getX(i),z=pos.getZ(i);pos.setY(i,height(x,z));land.attributes.uv.setXY(i,x/3.8,z/3.8);const dry=T.MathUtils.smoothstep(waterDistance(x,z),.98,1.31);const c=new T.Color().setRGB(.54,.315,.195).multiplyScalar(.96+.04*Math.sin(x*7+z*2)+.025*Math.cos(z*9));colors.push(c.r*(.64+.36*dry),c.g*(.76+.24*dry),c.b*(.82+.18*dry))}
+land.setAttribute('color',new T.Float32BufferAttribute(colors,3));land.computeVertexNormals();const dunes=new T.Mesh(land,drySand);dunes.receiveShadow=true;scene.add(dunes);
 const duneNight={value:0};
 dunes.material.onBeforeCompile=shader=>{
   shader.uniforms.duneNight=duneNight;
   shader.vertexShader='varying vec3 sandPosition; varying vec3 sandNormal;\n'+shader.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\nsandPosition=position; sandNormal=normal;');
   shader.fragmentShader='uniform float duneNight; varying vec3 sandPosition; varying vec3 sandNormal;\n'+shader.fragmentShader.replace('#include <opaque_fragment>',`
     float facing=smoothstep(-.24,.25,dot(normalize(sandNormal),normalize(vec3(-.8,.06,-.55))));
-    float nearSand=1.-smoothstep(6.,24.,distance(cameraPosition,sandPosition));
-    float ripple=sin(sandPosition.z*9.+sandPosition.x*2.2+1.4*sin(sandPosition.x*1.3)+.6*sin(sandPosition.z*.8));
-    outgoingLight*=1.-.11*nearSand*smoothstep(.4,.94,ripple);
     outgoingLight*=mix(vec3(1.),mix(vec3(.43,.55,1.04),vec3(1.14,1.08,1.17),facing),duneNight);
     #include <opaque_fragment>`);
 };
@@ -88,13 +95,15 @@ pixelate(dunes.material);
 for(const [x,z,r] of [[-34,-75,17],[65,-151,24],[83,-169,14]]){const m=mesh(scene,new T.ConeGeometry(r,r*1.25,4),0xb58665,x,height(x,z)+r*.49,z);m.rotation.y=Math.PI/4}
 // Sample the same ground surface as the horse across the entire trail width.
 const medinaApproach=new T.CatmullRomCurve3([[0,0],[0,-22],[-.45,-48],[0,-69],[0,-82]].map(([x,z])=>new T.Vector3(x,0,z)));
+pixelate(packedTrail);
 for(const route of [ridgeRoute,discoveryRoute,medinaApproach]){
-const trackVertices=[],trackIndices=[],trackColors=[];
+const trackVertices=[],trackIndices=[],trackColors=[],trackUV=[];
 for(let row=0;row<=180;row++){
   const t=row/180,p=route.getPointAt(t),v=route.getTangentAt(t);
   for(let col=0;col<=8;col++){
     const offset=(col-4)*.58;
     const x=p.x-v.z*offset,z=p.z+v.x*offset;
+    trackUV.push(x/2.8,z/2.8);
     trackVertices.push(x,height(x,z)+(route===medinaApproach?.07:.055),z);
     const shade=[1,.95,.81,.89,.94,.89,.81,.95,1][col]*(.98+.02*Math.sin(row*1.4));
     const stone=route===medinaApproach;
@@ -105,8 +114,9 @@ for(let row=0;row<=180;row++){
 const trackGeometry=new T.BufferGeometry();
 trackGeometry.setAttribute('position',new T.Float32BufferAttribute(trackVertices,3));
 trackGeometry.setAttribute('color',new T.Float32BufferAttribute(trackColors,3));
+trackGeometry.setAttribute('uv',new T.Float32BufferAttribute(trackUV,2));
 trackGeometry.setIndex(trackIndices);trackGeometry.computeVertexNormals();
-const track=new T.Mesh(trackGeometry,pixelate(new T.MeshStandardMaterial({vertexColors:true,side:T.DoubleSide})));
+const track=new T.Mesh(trackGeometry,packedTrail);
 track.receiveShadow=true;scene.add(track);
 }
 const lunarDisc=document.createElement('canvas');lunarDisc.width=lunarDisc.height=40;
